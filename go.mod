@@ -1,4 +1,4 @@
-module github.com/SpaceshipCreative/bifrost-suprarouter
+module github.com/SpaceshipCreative/bifrost-tumnus
 
 go 1.26.4
 

@@ -25,8 +25,8 @@ threshold and guides it to the right model. This spec covers three coupled piece
 | Log/error prefixes | `suprarouter:` | `tumnus:` |
 | Default bypass header | `x-supra-bypass` | `x-tumnus-bypass` |
 | Dashboard binary | — | `tumnus-dashboard` (default `127.0.0.1:9090`) |
-| GitHub repo | `SpaceshipCreative/bifrost-suprarouter` | `SpaceshipCreative/bifrost-tumnus` |
-| Go module path | `github.com/SpaceshipCreative/bifrost-suprarouter` | `github.com/SpaceshipCreative/bifrost-tumnus` |
+| GitHub repo | `SpaceshipCreative/bifrost-tumnus` | `SpaceshipCreative/bifrost-tumnus` |
+| Go module path | `github.com/SpaceshipCreative/bifrost-tumnus` | `github.com/SpaceshipCreative/bifrost-tumnus` |
 | Build artifact | `suprarouter.so` | `tumnus.so` |
 
 Config schema keys are already vendor-neutral (`endpoint`, `router_model`, `roles`,

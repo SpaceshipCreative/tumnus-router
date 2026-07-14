@@ -1,4 +1,4 @@
-# bifrost-suprarouter
+# bifrost-tumnus
 
 A [Bifrost](https://github.com/maximhq/bifrost) plugin that routes every chat
 request through [SupraLabs/Supra-Router-51M](https://huggingface.co/SupraLabs/Supra-Router-51M):

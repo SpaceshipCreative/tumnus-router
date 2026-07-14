@@ -11,10 +11,10 @@
 **Verified facts (don't re-derive):**
 - Bifrost management API: `GET /api/plugins/{name}` returns a flat `PluginResponse` JSON (fields include `name`, `enabled`, `path`, `placement`, `order`, `config`); `PUT /api/plugins/{name}` updates. Source: `bifrost/transports/bifrost-http/handlers/plugins.go:96-102,119`. Verify exact `PluginResponse` field names at that line before writing the proxy structs; adjust JSON tags if they differ.
 - Plugin transport hooks wrap inference routes only (`server.go:1945`) — the plugin serves NO HTTP. Dashboard is standalone.
-- Repo currently: `github.com/SpaceshipCreative/bifrost-suprarouter`, private, core pinned to dev pseudo-version `v1.6.4-0.20260714002449-d48dea621f55`, 21 tests passing under `-race`.
+- Repo currently: `github.com/SpaceshipCreative/bifrost-tumnus`, private, core pinned to dev pseudo-version `v1.6.4-0.20260714002449-d48dea621f55`, 21 tests passing under `-race`.
 - Go binary: `/opt/homebrew/bin/go` (add to PATH in every shell).
 
-**Working directory for all tasks:** `/Users/sjordan/Projects/bifrost-suprarouter` (will be renamed in Task 2 — `~/Projects/bifrost-tumnus` afterward).
+**Working directory for all tasks:** `/Users/sjordan/Projects/bifrost-tumnus` (will be renamed in Task 2 — `~/Projects/bifrost-tumnus` afterward).
 
 ---
 
@@ -26,7 +26,7 @@
 - [ ] **Step 1: Update names**
 
 ```bash
-cd /Users/sjordan/Projects/bifrost-suprarouter
+cd /Users/sjordan/Projects/bifrost-tumnus
 export PATH=/opt/homebrew/bin:$PATH
 sed -i '' 's/suprarouter:/tumnus:/g; s/x-supra-bypass/x-tumnus-bypass/g' main.go router.go main_test.go router_test.go
 sed -i '' 's/return "suprarouter"/return "tumnus"/' main.go
@@ -73,11 +73,11 @@ Expected: no active Go router project named Tumnus. If a direct collision exists
 - [ ] **Step 2: Rename repo and module**
 
 ```bash
-gh repo rename bifrost-tumnus --repo SpaceshipCreative/bifrost-suprarouter --yes
-cd /Users/sjordan/Projects && mv bifrost-suprarouter bifrost-tumnus && cd bifrost-tumnus
+gh repo rename bifrost-tumnus --repo SpaceshipCreative/bifrost-tumnus --yes
+cd /Users/sjordan/Projects && mv bifrost-tumnus bifrost-tumnus && cd bifrost-tumnus
 git remote set-url origin https://github.com/SpaceshipCreative/bifrost-tumnus.git
-sed -i '' 's|SpaceshipCreative/bifrost-suprarouter|SpaceshipCreative/bifrost-tumnus|g' go.mod
-grep -rl "bifrost-suprarouter" --include="*.go" --include="*.md" . | xargs sed -i '' 's/bifrost-suprarouter/bifrost-tumnus/g'
+sed -i '' 's|SpaceshipCreative/bifrost-tumnus|SpaceshipCreative/bifrost-tumnus|g' go.mod
+grep -rl "bifrost-tumnus" --include="*.go" --include="*.md" . | xargs sed -i '' 's/bifrost-tumnus/bifrost-tumnus/g'
 ```
 
 - [ ] **Step 3: Verify and commit**
