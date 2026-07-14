@@ -125,6 +125,7 @@ go build -o tumnus-dashboard ./cmd/dashboard
 
 | Tumnus | Bifrost core |
 |--------|--------------|
+| v0.1.1 | v1.7.0 |
 | v0.1.0 | v1.7.0 |
 
 Go plugins are exact-version constructs: the `github.com/maximhq/bifrost/core`

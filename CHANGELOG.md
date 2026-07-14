@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.1
 
 - Go 1.26.5 (fixes GO-2026-5856 / CVE-2026-42505 in crypto/tls).
 - Security hardening from the 2026-07-13 audits: dashboard XSS escaping and
