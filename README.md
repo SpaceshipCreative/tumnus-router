@@ -5,8 +5,8 @@
 Most LLM traffic is mismatched: trivial questions burning frontier-model money,
 hard problems timing out on small local models, code prompts landing anywhere.
 Tumnus fixes the mismatch at the gateway. A tiny 51M-parameter router model
-reads each chat request in ~100 ms and routes it to the model best suited —
-chit-chat to your fast local model, code to your cheap code model, genuinely
+reads each chat request in less than 100 ms and automatically routes it to the model best suited for your request —
+chit-chat to your fast local model, code to your cheap code model, send genuinely
 hard problems to the frontier. No routing rules to write, no regexes to
 maintain. Configure which model plays which role and you're done.
 
