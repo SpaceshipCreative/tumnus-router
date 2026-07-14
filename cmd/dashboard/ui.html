@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'">
 <title>Tumnus</title>
 <style>
  :root{color-scheme:dark light}
@@ -44,6 +45,9 @@
 <script>
 const ROLES=["local_small","local_big","code_cheap","frontier"];
 const $=q=>document.querySelector(q);
+// Config and classifier values are untrusted: escape everything interpolated
+// into innerHTML so a hostile provider/model/domain string can't run script.
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const hdrs=()=>{const t=sessionStorage.tumnusToken;return t?{"x-tumnus-token":t}:{ }};
 async function api(path,opts={}){
  const r=await fetch(path,{...opts,headers:{"Content-Type":"application/json",...hdrs(),...(opts.headers||{})}});
@@ -55,10 +59,10 @@ async function api(path,opts={}){
 function roleRows(cfg){
  $("#roles").innerHTML='<legend>Roles</legend>'+ROLES.map(r=>{
   const t=(cfg.roles||{})[r]||{};
-  const fb=(t.fallbacks||[]).map(f=>`${f.provider}/${f.model}`).join(", ");
+  const fb=(t.fallbacks||[]).map(f=>`${esc(f.provider)}/${esc(f.model)}`).join(", ");
   return `<div class="row" data-role="${r}">
-   <label>${r} provider <input data-k="provider" value="${t.provider||""}" required></label>
-   <label>model <input data-k="model" value="${t.model||""}" required></label>
+   <label>${r} provider <input data-k="provider" value="${esc(t.provider||"")}" required></label>
+   <label>model <input data-k="model" value="${esc(t.model||"")}" required></label>
    <label>fallbacks (provider/model, …) <input data-k="fb" value="${fb}"></label></div>`;
  }).join("");
 }
@@ -87,10 +91,10 @@ $("#cfg").onsubmit=async e=>{e.preventDefault();const s=$("#status");s.className
  catch(err){s.textContent="save failed: "+err.message;s.className="err";}};
 $("#run").onclick=async()=>{const v=$("#verdict");v.className="";
  try{const r=await api("/api/classify",{method:"POST",body:JSON.stringify({prompt:$("#prompt").value})});
-  v.innerHTML=`<div class="chips"><span>domain: ${r.domain||"—"}</span><span>complexity: ${r.complexity}</span>
-   <span>code: ${r.code}</span><span>math: ${r.math}</span><span>route: ${r.route}</span></div>
-   → <b>${r.role}</b>: ${r.target.provider}/${r.target.model}
-   (fallbacks: ${(r.fallbacks||[]).map(f=>f.provider+"/"+f.model).join(" → ")||"none"}) — ${r.latency_ms} ms`;
+  v.innerHTML=`<div class="chips"><span>domain: ${esc(r.domain||"—")}</span><span>complexity: ${esc(r.complexity)}</span>
+   <span>code: ${esc(r.code)}</span><span>math: ${esc(r.math)}</span><span>route: ${esc(r.route)}</span></div>
+   → <b>${esc(r.role)}</b>: ${esc(r.target.provider)}/${esc(r.target.model)}
+   (fallbacks: ${(r.fallbacks||[]).map(f=>esc(f.provider)+"/"+esc(f.model)).join(" → ")||"none"}) — ${esc(r.latency_ms)} ms`;
  }catch(err){v.textContent="classify failed: "+err.message;v.className="err";}};
 load();
 </script>

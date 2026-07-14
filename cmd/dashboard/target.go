@@ -18,14 +18,15 @@ type DeployTarget interface {
 }
 
 // BifrostTarget manages the tumnus plugin entry via Bifrost's management API.
-// It preserves every PluginResponse field it read on Load (enabled, path,
-// placement, order, ...) and swaps only "config" on Save.
+// Save re-reads the full PluginResponse immediately before writing and swaps
+// only "config", so plugin metadata (enabled, path, placement, order, ...)
+// changed by another administrator is never restored stale, and there is no
+// shared mutable state between concurrent handlers.
 type BifrostTarget struct {
 	BaseURL    string // e.g. http://localhost:8080
 	Token      string // optional; sent as Authorization: Bearer
 	PluginName string // "tumnus"
 	Client     *http.Client
-	lastPlugin map[string]any // full PluginResponse from the last Load
 }
 
 func (b *BifrostTarget) do(ctx context.Context, method, path string, body any) (map[string]any, error) {
@@ -71,22 +72,16 @@ func (b *BifrostTarget) Load(ctx context.Context) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	b.lastPlugin = plugin
 	cfg, _ := plugin["config"].(map[string]any)
 	return cfg, nil
 }
 
 func (b *BifrostTarget) Save(ctx context.Context, config map[string]any) error {
-	if b.lastPlugin == nil {
-		if _, err := b.Load(ctx); err != nil {
-			return err
-		}
+	plugin, err := b.do(ctx, http.MethodGet, "/api/plugins/"+b.PluginName, nil)
+	if err != nil {
+		return err
 	}
-	body := map[string]any{}
-	for k, v := range b.lastPlugin {
-		body[k] = v
-	}
-	body["config"] = config
-	_, err := b.do(ctx, http.MethodPut, "/api/plugins/"+b.PluginName, body)
+	plugin["config"] = config
+	_, err = b.do(ctx, http.MethodPut, "/api/plugins/"+b.PluginName, plugin)
 	return err
 }

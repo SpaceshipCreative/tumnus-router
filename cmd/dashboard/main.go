@@ -7,7 +7,9 @@ import (
 	_ "embed"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -36,12 +38,19 @@ func (s *server) auth(next http.HandlerFunc) http.HandlerFunc {
 
 func jsonOut(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
 func (s *server) handleUI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("X-Frame-Options", "DENY")
+	// Inline script/style are the page; connect-src 'self' blocks exfiltration
+	// fetches if markup injection ever slips past the client-side escaping.
+	w.Header().Set("Content-Security-Policy",
+		"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'")
 	_, _ = w.Write(uiHTML)
 }
 
@@ -97,7 +106,8 @@ func (s *server) handleClassify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	start := time.Now()
-	a, err := routerpkg.Classify(r.Context(), s.client, cfg, in.Prompt)
+	// Same limit the plugin applies, so the console reproduces production.
+	a, err := routerpkg.Classify(r.Context(), s.client, cfg, routerpkg.TruncatePrompt(in.Prompt, cfg.MaxPromptChars))
 	if err != nil {
 		jsonOut(w, http.StatusBadGateway, map[string]string{"error": "classifier: " + err.Error()})
 		return
@@ -125,6 +135,25 @@ func newMux(s *server) *http.ServeMux {
 	return mux
 }
 
+// listenAllowed refuses a non-loopback bind unless a dashboard token is set:
+// the dashboard exposes live router config and classifier access.
+func listenAllowed(listen, token string) error {
+	if token != "" {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(listen)
+	if err != nil {
+		return fmt.Errorf("bad --listen address %q: %w", listen, err)
+	}
+	if host == "localhost" {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf("refusing to listen on non-loopback %q without --token", listen)
+}
+
 func main() {
 	listen := flag.String("listen", "127.0.0.1:9090", "listen address")
 	bifrostURL := flag.String("bifrost-url", "http://localhost:8080", "Bifrost gateway base URL")
@@ -132,12 +161,23 @@ func main() {
 	token := flag.String("token", "", "require x-tumnus-token on all endpoints")
 	flag.Parse()
 
+	if err := listenAllowed(*listen, *token); err != nil {
+		log.Fatal(err)
+	}
 	client := &http.Client{Timeout: 10 * time.Second}
 	s := &server{
 		target: &BifrostTarget{BaseURL: *bifrostURL, Token: *bifrostToken, PluginName: "tumnus", Client: client},
 		token:  *token,
 		client: client,
 	}
+	srv := &http.Server{
+		Addr:              *listen,
+		Handler:           newMux(s),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 	log.Printf("tumnus-dashboard listening on http://%s (bifrost: %s)", *listen, *bifrostURL)
-	log.Fatal(http.ListenAndServe(*listen, newMux(s)))
+	log.Fatal(srv.ListenAndServe())
 }

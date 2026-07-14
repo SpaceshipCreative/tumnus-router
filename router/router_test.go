@@ -209,3 +209,33 @@ func TestExtractLastUserTextTruncationAndEmpty(t *testing.T) {
 		t.Fatalf("empty: got %q", got)
 	}
 }
+
+func TestParseConfigNonPositiveLimits(t *testing.T) {
+	for name, mutate := range map[string]func(m map[string]any){
+		"zero timeout":          func(m map[string]any) { m["timeout_ms"] = 0 },
+		"negative timeout":      func(m map[string]any) { m["timeout_ms"] = -5 },
+		"zero prompt chars":     func(m map[string]any) { m["max_prompt_chars"] = 0 },
+		"negative prompt chars": func(m map[string]any) { m["max_prompt_chars"] = -1 },
+	} {
+		raw := validRawConfig()
+		mutate(raw)
+		if _, err := ParseConfig(raw); err == nil {
+			t.Errorf("%s: expected error, got nil", name)
+		}
+	}
+}
+
+func TestTruncatePromptRuneAware(t *testing.T) {
+	if got := TruncatePrompt("héllo wörld", 2); got != "hé" {
+		t.Fatalf("got %q", got)
+	}
+	if got := TruncatePrompt("héllo", 99); got != "héllo" {
+		t.Fatalf("no-op: got %q", got)
+	}
+	if got := TruncatePrompt("héllo", 0); got != "" {
+		t.Fatalf("zero: got %q", got)
+	}
+	if got := ExtractLastUserText([]schemas.ChatMessage{userMsg(schemas.ChatMessageContent{ContentStr: strPtr("ééééé")})}, 3); got != "ééé" {
+		t.Fatalf("extract: got %q", got)
+	}
+}

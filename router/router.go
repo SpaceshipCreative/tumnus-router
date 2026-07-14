@@ -67,6 +67,12 @@ func ParseConfig(raw any) (*Config, error) {
 	if cfg.FrontierComplexityThreshold < 1 || cfg.FrontierComplexityThreshold > 5 {
 		return nil, fmt.Errorf("tumnus: frontier_complexity_threshold must be 1-5, got %d", cfg.FrontierComplexityThreshold)
 	}
+	if cfg.TimeoutMs <= 0 {
+		return nil, fmt.Errorf("tumnus: timeout_ms must be positive, got %d", cfg.TimeoutMs)
+	}
+	if cfg.MaxPromptChars <= 0 {
+		return nil, fmt.Errorf("tumnus: max_prompt_chars must be positive, got %d", cfg.MaxPromptChars)
+	}
 	for _, role := range AllRoles {
 		target, ok := cfg.Roles[role]
 		if !ok || target.Provider == "" || target.Model == "" {
@@ -240,12 +246,23 @@ func ExtractLastUserText(msgs []schemas.ChatMessage, maxChars int) string {
 		if text == "" {
 			return ""
 		}
-		if len(text) > maxChars {
-			// ponytail: byte truncation may split a UTF-8 rune; the classifier
-			// tolerates a mangled trailing char. Switch to rune-aware slicing if it matters.
-			text = text[:maxChars]
-		}
-		return text
+		return TruncatePrompt(text, maxChars)
 	}
 	return ""
+}
+
+// TruncatePrompt returns s truncated to at most maxChars runes, never
+// splitting a UTF-8 sequence (the contract counts chars, not bytes).
+func TruncatePrompt(s string, maxChars int) string {
+	if maxChars <= 0 {
+		return ""
+	}
+	n := 0
+	for i := range s {
+		if n == maxChars {
+			return s[:i]
+		}
+		n++
+	}
+	return s
 }

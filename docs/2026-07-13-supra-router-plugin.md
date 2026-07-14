@@ -1,3 +1,6 @@
+> **Historical document** (superseded 2026-07-13): kept for design context. Naming, test counts, and route semantics may be outdated — docs/CONTRACT.md and the README are canonical.
+
+
 # Supra Router Plugin Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

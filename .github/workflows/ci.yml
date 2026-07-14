@@ -16,7 +16,9 @@ jobs:
       - name: canary bump (scheduled only)
         if: github.event_name == 'schedule'
         run: go get github.com/maximhq/bifrost/core@latest && go mod tidy
+      - run: go mod verify
       - run: go vet ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - run: go test -race ./...
       - run: go build -buildmode=plugin -o tumnus.so .
       - run: go build -o tumnus-dashboard ./cmd/dashboard

@@ -69,7 +69,9 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 		return nil
 	}
 
-	cctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutMs)*time.Millisecond)
+	// Derive from the request context so a client disconnect or upstream
+	// deadline cancels the classifier call instead of letting it run on.
+	cctx, cancel := context.WithTimeout(ctx, time.Duration(cfg.TimeoutMs)*time.Millisecond)
 	defer cancel()
 	start := time.Now()
 	a, err := routerpkg.Classify(cctx, s.client, cfg, text)

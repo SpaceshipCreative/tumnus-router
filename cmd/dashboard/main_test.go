@@ -136,3 +136,61 @@ func TestTokenEnforced(t *testing.T) {
 		t.Fatalf("with token want 200, got %d", resp2.StatusCode)
 	}
 }
+
+func TestSaveUsesFreshPluginMetadata(t *testing.T) {
+	gets := 0
+	var lastPut map[string]any
+	bf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			gets++
+			order := 0
+			if gets > 1 {
+				order = 7 // another admin changed it between load and save
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"name": "tumnus", "enabled": true, "order": order, "config": validConfig(),
+			})
+		case http.MethodPut:
+			_ = json.NewDecoder(r.Body).Decode(&lastPut)
+			_ = json.NewEncoder(w).Encode(map[string]string{"message": "ok"})
+		}
+	}))
+	defer bf.Close()
+	client := &http.Client{Timeout: 5 * time.Second}
+	s := &server{target: &BifrostTarget{BaseURL: bf.URL, PluginName: "tumnus", Client: client}, client: client}
+	ts := httptest.NewServer(newMux(s))
+	defer ts.Close()
+
+	resp, _ := http.Get(ts.URL + "/api/config") // first GET
+	resp.Body.Close()
+	buf, _ := json.Marshal(validConfig())
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/config", strings.NewReader(string(buf)))
+	resp2, _ := http.DefaultClient.Do(req)
+	if resp2.StatusCode != 200 {
+		t.Fatalf("PUT status %d", resp2.StatusCode)
+	}
+	if lastPut["order"].(float64) != 7 {
+		t.Fatalf("save used stale metadata: %+v", lastPut)
+	}
+}
+
+func TestListenAllowed(t *testing.T) {
+	cases := []struct {
+		listen, token string
+		ok            bool
+	}{
+		{"127.0.0.1:9090", "", true},
+		{"localhost:9090", "", true},
+		{"[::1]:9090", "", true},
+		{"0.0.0.0:9090", "", false},
+		{"192.168.1.10:9090", "", false},
+		{"0.0.0.0:9090", "sekrit", true},
+	}
+	for _, tc := range cases {
+		err := listenAllowed(tc.listen, tc.token)
+		if (err == nil) != tc.ok {
+			t.Errorf("listenAllowed(%q,%q) = %v, want ok=%v", tc.listen, tc.token, err, tc.ok)
+		}
+	}
+}

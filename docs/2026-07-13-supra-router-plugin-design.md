@@ -1,3 +1,6 @@
+> **Historical document** (superseded 2026-07-13): kept for design context. Naming, test counts, and route semantics may be outdated — docs/CONTRACT.md and the README are canonical.
+
+
 # Supra Router Plugin — Design Spec
 
 **Date:** 2026-07-13

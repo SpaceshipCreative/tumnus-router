@@ -5,7 +5,8 @@
 Most LLM traffic is mismatched: trivial questions burning frontier-model money,
 hard problems timing out on small local models, code prompts landing anywhere.
 Tumnus fixes the mismatch at the gateway. A tiny 51M-parameter router model
-reads each chat request in less than 100 ms and automatically routes it to the model best suited for your request —
+reads each chat request in less than 100 ms (hardware-dependent) and
+automatically routes it to the model best suited for your request —
 chit-chat to your fast local model, code to your cheap code model, send genuinely
 hard problems to the frontier. No routing rules to write, no regexes to
 maintain. Configure which model plays which role and you're done.
@@ -134,10 +135,16 @@ to re-pin before building.
 
 ## Security
 
-The dashboard binds `127.0.0.1` by default. If you move it beyond localhost,
-set `--token` — and never expose the dashboard or the gateway management API
-publicly. The bypass header (`x-tumnus-bypass`) lets any caller skip routing
-for a request; treat it as an operator convenience, not an access control.
+The dashboard binds `127.0.0.1` by default and refuses non-loopback binds
+unless `--token` is set — and never expose the dashboard or the gateway
+management API publicly. The bypass header (`x-tumnus-bypass`) lets any caller
+skip routing for a request; treat it as an operator convenience, not an access
+control.
+
+Editing the router config is operator-level power: whoever can save it can
+point the classifier endpoint at any URL the plugin and dashboard can reach
+(SSRF-equivalent). Restrict config access accordingly; see
+[SECURITY.md](SECURITY.md) for the full trust model.
 
 ## Roadmap
 
