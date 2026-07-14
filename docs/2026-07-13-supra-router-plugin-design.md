@@ -71,10 +71,10 @@ role→model assignments are configurable.
 
 | Role | Provider | Model |
 |---|---|---|
-| `local_small` | local vLLM (custom provider) | Qwen3.6 35B-A3B NVFP4 |
-| `local_big` | local vLLM (custom provider) | DeepSeek V4 Flash |
-| `code_cheap` | Ollama Cloud | GLM 5.2 |
-| `frontier` | Anthropic | Claude Fable |
+| `local_small` | local vLLM (custom provider) | `<your-fast-local-model>` |
+| `local_big` | local vLLM (custom provider) | `<your-big-local-model>` |
+| `code_cheap` | Ollama Cloud | `<your-cheap-code-api>` |
+| `frontier` | Anthropic | `<your-frontier-model>` |
 
 All four targets must already exist as providers in Bifrost's provider config;
 the plugin only points at them.
@@ -83,7 +83,7 @@ the plugin only points at them.
 
 ```json
 {
-  "endpoint": "http://spark-1:8000/v1/completions",
+  "endpoint": "http://classifier-host:8000/v1/completions",
   "router_model": "SupraLabs/Supra-Router-51M",
   "timeout_ms": 150,
   "max_prompt_chars": 4000,

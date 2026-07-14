@@ -12,7 +12,7 @@ import (
 
 func validRawConfig() map[string]any {
 	return map[string]any{
-		"endpoint": "http://spark-1:8000/v1/completions",
+		"endpoint": "http://classifier-host:8000/v1/completions",
 		"roles": map[string]any{
 			"local_small": map[string]any{"provider": "vllm-local", "model": "qwen3.6-35b-a3b"},
 			"local_big":   map[string]any{"provider": "vllm-local", "model": "deepseek-v4-flash"},

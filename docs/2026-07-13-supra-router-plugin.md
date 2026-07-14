@@ -40,8 +40,8 @@
 - [ ] **Step 1: Create the module**
 
 ```bash
-mkdir -p /Users/sjordan/Projects/bifrost/plugins/suprarouter
-cd /Users/sjordan/Projects/bifrost/plugins/suprarouter
+mkdir -p ~/Projects/bifrost/plugins/suprarouter
+cd ~/Projects/bifrost/plugins/suprarouter
 go mod init github.com/maximhq/bifrost/plugins/suprarouter
 go mod edit -go=1.26.1
 go get github.com/maximhq/bifrost/core@latest
@@ -64,7 +64,7 @@ import "testing"
 
 func validRawConfig() map[string]any {
 	return map[string]any{
-		"endpoint": "http://spark-1:8000/v1/completions",
+		"endpoint": "http://classifier-host:8000/v1/completions",
 		"roles": map[string]any{
 			"local_small": map[string]any{"provider": "vllm-local", "model": "qwen3.6-35b-a3b"},
 			"local_big":   map[string]any{"provider": "vllm-local", "model": "deepseek-v4-flash"},
@@ -104,7 +104,7 @@ func TestParseConfigInvalid(t *testing.T) {
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `cd /Users/sjordan/Projects/bifrost/plugins/suprarouter && go test ./...`
+Run: `cd ~/Projects/bifrost/plugins/suprarouter && go test ./...`
 Expected: FAIL — `undefined: parseConfig`
 
 - [ ] **Step 4: Implement config in `router.go`**
@@ -918,7 +918,7 @@ clean:
 
 - [ ] **Step 2: Verify the plugin builds as a shared object**
 
-Run: `cd /Users/sjordan/Projects/bifrost/plugins/suprarouter && make build && ls -la suprarouter.so`
+Run: `cd ~/Projects/bifrost/plugins/suprarouter && make build && ls -la suprarouter.so`
 Expected: `suprarouter.so` exists. (Requires Go 1.26.1 on macOS/Linux; no cross-compilation.)
 
 - [ ] **Step 3: Write `README.md`**
@@ -962,7 +962,7 @@ any CEL routing rule you add later still overrides it (manual escape hatch).
       "placement": "pre_builtin",
       "order": 0,
       "config": {
-        "endpoint": "http://spark-1:8000/v1/completions",
+        "endpoint": "http://classifier-host:8000/v1/completions",
         "roles": {
           "local_small": { "provider": "vllm-local", "model": "qwen3.6-35b-a3b" },
           "local_big":   { "provider": "vllm-local", "model": "deepseek-v4-flash" },

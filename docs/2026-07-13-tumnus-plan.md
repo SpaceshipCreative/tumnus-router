@@ -14,7 +14,7 @@
 - Repo currently: `github.com/SpaceshipCreative/bifrost-tumnus`, private, core pinned to dev pseudo-version `v1.6.4-0.20260714002449-d48dea621f55`, 21 tests passing under `-race`.
 - Go binary: `/opt/homebrew/bin/go` (add to PATH in every shell).
 
-**Working directory for all tasks:** `/Users/sjordan/Projects/bifrost-tumnus` (will be renamed in Task 2 — `~/Projects/bifrost-tumnus` afterward).
+**Working directory for all tasks:** `~/Projects/bifrost-tumnus` (will be renamed in Task 2 — `~/Projects/bifrost-tumnus` afterward).
 
 ---
 
@@ -26,7 +26,7 @@
 - [ ] **Step 1: Update names**
 
 ```bash
-cd /Users/sjordan/Projects/bifrost-tumnus
+cd ~/Projects/bifrost-tumnus
 export PATH=/opt/homebrew/bin:$PATH
 sed -i '' 's/suprarouter:/tumnus:/g; s/x-supra-bypass/x-tumnus-bypass/g' main.go router.go main_test.go router_test.go
 sed -i '' 's/return "suprarouter"/return "tumnus"/' main.go
@@ -74,7 +74,7 @@ Expected: no active Go router project named Tumnus. If a direct collision exists
 
 ```bash
 gh repo rename bifrost-tumnus --repo SpaceshipCreative/bifrost-tumnus --yes
-cd /Users/sjordan/Projects && mv bifrost-tumnus bifrost-tumnus && cd bifrost-tumnus
+cd ~/Projects && mv bifrost-tumnus bifrost-tumnus && cd bifrost-tumnus
 git remote set-url origin https://github.com/SpaceshipCreative/bifrost-tumnus.git
 sed -i '' 's|SpaceshipCreative/bifrost-tumnus|SpaceshipCreative/bifrost-tumnus|g' go.mod
 grep -rl "bifrost-tumnus" --include="*.go" --include="*.md" . | xargs sed -i '' 's/bifrost-tumnus/bifrost-tumnus/g'
@@ -770,7 +770,7 @@ jobs:
 
 - [ ] **Step 2: Write `docs/CONTRACT.md`** — the portable routing contract, exactly three sections: **1. Classifier I/O** (request: OpenAI-compatible `POST /v1/completions`, prompt `Task: <text>\nAnalysis: `, `temperature: 0`, `max_tokens: 96`; response: `choices[0].text` pipe-separated `Domain: ... | Complexity: 1-5 | Math: True/False | Code: True/False | Route: small model/big model | Justification: ...`; `Route` required, all else optional with zero-value defaults, malformed optional fields ignored); **2. Decision ladder** (the four-rung first-match table with default-fallback derivation, copied from the ladder in `router/router.go` and the README); **3. Behavioral guarantees** (fail-open on any classification problem — never block or reroute unclassified requests; classify last user message only, truncated to `max_prompt_chars`; bypass header skips routing; decisions logged with domain/complexity/flags/role/target/latency). Header note: "Contract version 1. Adapters (Bifrost, LiteLLM, OpenCode, Hermes Agent, OpenClaw) implement this document; breaking changes bump the version."
 
-- [ ] **Step 3: Sanitize** — in both older docs: `sed -i '' 's/spark-1/classifier-host/g' docs/2026-07-13-*.md`; replace the "Initial role assignments (operator's deployment)" table's model column values with `<your-fast-local-model>`, `<your-big-local-model>`, `<your-cheap-code-api>`, `<your-frontier-model>`; then scan: `git grep -iE "spark-|sjordan|spaceshipcreative\.com|api[_-]?key|token" -- ':!docs/CONTRACT.md'` and clear every hit that is personal or secret (module-path hits for the SpaceshipCreative org are fine; `--token`/`x-tumnus-token` flag hits are fine). Also scan history: `git log -p | grep -icE "apikey|secret|bearer [a-z0-9]{20}"` — expect 0.
+- [ ] **Step 3: Sanitize** — in both older docs: `sed -i '' 's/classifier-host/classifier-host/g' docs/2026-07-13-*.md`; replace the "Initial role assignments (operator's deployment)" table's model column values with `<your-fast-local-model>`, `<your-big-local-model>`, `<your-cheap-code-api>`, `<your-frontier-model>`; then scan: `git grep -iE "spark-|username|spaceshipcreative\.com|api[_-]?key|token" -- ':!docs/CONTRACT.md'` and clear every hit that is personal or secret (module-path hits for the SpaceshipCreative org are fine; `--token`/`x-tumnus-token` flag hits are fine). Also scan history: `git log -p | grep -icE "apikey|secret|bearer [a-z0-9]{20}"` — expect 0.
 
 - [ ] **Step 4: Commit**
 
