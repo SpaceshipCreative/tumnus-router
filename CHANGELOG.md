@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.2
 
 - Validate fallback entries in ParseConfig (empty provider/model rejected).
 - Treat out-of-range classifier Complexity (outside 1-5) as the zero default.
