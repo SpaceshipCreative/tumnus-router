@@ -4,18 +4,21 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
 )
 
-// Plugin-level state, set by Init. Dynamic Bifrost plugins are exported
-// package-level functions (see examples/plugins/hello-world), so state is
-// package-level too. Init is called once at load; hooks only read.
-var (
-	cfg        *Config
-	httpClient *http.Client
-)
+// pluginState bundles everything Init produces so hooks can snapshot it in a
+// single atomic load. Bifrost may call Cleanup/Init (unload/reload) while
+// requests are in flight; hooks must never observe a half-torn-down state.
+type pluginState struct {
+	cfg    *Config
+	client *http.Client
+}
+
+var state atomic.Pointer[pluginState]
 
 // Init parses and validates the plugin config. Invalid config fails the load.
 func Init(rawConfig any) error {
@@ -23,8 +26,18 @@ func Init(rawConfig any) error {
 	if err != nil {
 		return err
 	}
-	cfg = parsed
-	httpClient = &http.Client{Timeout: time.Duration(cfg.TimeoutMs) * time.Millisecond}
+	// One outbound call per chat request to a single classifier host: raise
+	// the idle pool above DefaultTransport's 2 conns/host so bursts reuse
+	// connections instead of paying TCP setup inside the timeout budget.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConnsPerHost = 32
+	state.Store(&pluginState{
+		cfg: parsed,
+		client: &http.Client{
+			Timeout:   time.Duration(parsed.TimeoutMs) * time.Millisecond,
+			Transport: transport,
+		},
+	})
 	return nil
 }
 
@@ -38,9 +51,11 @@ func GetName() string {
 // untouched (fail-open): worst case the gateway behaves as if this plugin
 // were not installed.
 func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) error {
-	if cfg == nil || req == nil || req.ChatRequest == nil {
+	s := state.Load() // snapshot once; only s.* is used below
+	if s == nil || req == nil || req.ChatRequest == nil {
 		return nil
 	}
+	cfg := s.cfg
 	if req.RequestType != schemas.ChatCompletionRequest && req.RequestType != schemas.ChatCompletionStreamRequest {
 		return nil
 	}
@@ -56,7 +71,7 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 	cctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutMs)*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	a, err := classify(cctx, httpClient, cfg, text)
+	a, err := classify(cctx, s.client, cfg, text)
 	if err != nil {
 		// Fail open: never block or reroute a request we could not classify.
 		ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelWarn,
@@ -103,9 +118,9 @@ func PostLLMHook(_ *schemas.BifrostContext, resp *schemas.BifrostResponse, bifro
 	return resp, bifrostErr, nil
 }
 
-// Cleanup releases plugin state at shutdown (and between tests).
+// Cleanup releases plugin state at shutdown (and between tests). In-flight
+// hooks that already snapshotted the state finish safely on the old pointer.
 func Cleanup() error {
-	cfg = nil
-	httpClient = nil
+	state.Store(nil)
 	return nil
 }

@@ -101,11 +101,11 @@ func parseAnalysis(s string) (*analysis, error) {
 		case "domain":
 			a.Domain = value
 		case "complexity":
-			n, err := strconv.Atoi(value)
-			if err != nil {
-				return nil, fmt.Errorf("suprarouter: bad complexity %q", value)
+			// Optional field: model-output drift here shouldn't discard an
+			// otherwise-valid verdict. Unparseable -> stays 0 (lowest tier).
+			if n, err := strconv.Atoi(value); err == nil {
+				a.Complexity = n
 			}
-			a.Complexity = n
 		case "math":
 			a.Math = strings.EqualFold(value, "true")
 		case "code":
@@ -196,6 +196,8 @@ func classify(ctx context.Context, client *http.Client, cfg *Config, prompt stri
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		// Drain (bounded) so the connection returns to the idle pool.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("suprarouter: classifier returned status %d", resp.StatusCode)
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))

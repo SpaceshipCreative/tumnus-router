@@ -61,11 +61,48 @@ func TestParseAnalysis(t *testing.T) {
 }
 
 func TestParseAnalysisGarbage(t *testing.T) {
-	for _, s := range []string{"", "hello world", "Domain: x | Complexity: banana | Route: small model"} {
+	for _, s := range []string{"", "hello world"} {
 		if _, err := parseAnalysis(s); err == nil {
 			t.Errorf("%q: expected error, got nil", s)
 		}
 	}
+}
+
+func TestParseAnalysisMalformedComplexityIsOptional(t *testing.T) {
+	a, err := parseAnalysis("Domain: x | Complexity: banana | Route: small model")
+	if err != nil {
+		t.Fatalf("malformed optional field should not fail the verdict: %v", err)
+	}
+	if a.Complexity != 0 || a.Route != "small model" {
+		t.Fatalf("bad parse: %+v", a)
+	}
+}
+
+// TestConcurrentInitCleanupHook is the -race regression test for the
+// snapshot-based plugin state: hooks racing Init/Cleanup must neither race
+// nor panic, and must fail open when the plugin is torn down mid-flight.
+func TestConcurrentInitCleanupHook(t *testing.T) {
+	srv := fakeSupra(t, "Domain: x | Complexity: 1 | Math: False | Code: False | Route: small model", 0)
+	defer srv.Close()
+	raw := validRawConfig()
+	raw["endpoint"] = srv.URL
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			_ = Init(raw)
+			_ = Cleanup()
+		}
+	}()
+	for i := 0; i < 200; i++ {
+		req := chatRequest("hello")
+		if err := PreRequestHook(newCtx(), req); err != nil {
+			t.Errorf("hook returned error under churn: %v", err)
+		}
+	}
+	<-done
+	_ = Cleanup()
 }
 
 func TestParseAnalysisMissingRoute(t *testing.T) {
