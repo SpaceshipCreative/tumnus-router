@@ -14,7 +14,7 @@ import (
 	"os"
 	"time"
 
-	routerpkg "github.com/SpaceshipCreative/bifrost-tumnus/router"
+	routerpkg "github.com/SpaceshipCreative/tumnus/router"
 )
 
 //go:embed ui.html

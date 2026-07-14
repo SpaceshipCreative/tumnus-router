@@ -9,7 +9,7 @@
 ## Reporting a vulnerability
 
 Report vulnerabilities privately via
-[GitHub security advisories](https://github.com/SpaceshipCreative/bifrost-tumnus/security/advisories/new).
+[GitHub security advisories](https://github.com/SpaceshipCreative/tumnus/security/advisories/new).
 Please do not open public issues for security reports.
 
 ## Trust model

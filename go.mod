@@ -1,4 +1,4 @@
-module github.com/SpaceshipCreative/bifrost-tumnus
+module github.com/SpaceshipCreative/tumnus
 
 go 1.26.4
 

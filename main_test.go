@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	routerpkg "github.com/SpaceshipCreative/bifrost-tumnus/router"
+	routerpkg "github.com/SpaceshipCreative/tumnus/router"
 	"github.com/maximhq/bifrost/core/schemas"
 )
 

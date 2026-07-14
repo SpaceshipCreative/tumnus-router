@@ -14,7 +14,7 @@
 **Verified facts (don't re-derive):**
 - Bifrost management API: `GET /api/plugins/{name}` returns a flat `PluginResponse` JSON (fields include `name`, `enabled`, `path`, `placement`, `order`, `config`); `PUT /api/plugins/{name}` updates. Source: `bifrost/transports/bifrost-http/handlers/plugins.go:96-102,119`. Verify exact `PluginResponse` field names at that line before writing the proxy structs; adjust JSON tags if they differ.
 - Plugin transport hooks wrap inference routes only (`server.go:1945`) — the plugin serves NO HTTP. Dashboard is standalone.
-- Repo currently: `github.com/SpaceshipCreative/bifrost-tumnus`, private, core pinned to dev pseudo-version `v1.6.4-0.20260714002449-d48dea621f55`, 21 tests passing under `-race`.
+- Repo currently: `github.com/SpaceshipCreative/tumnus`, private, core pinned to dev pseudo-version `v1.6.4-0.20260714002449-d48dea621f55`, 21 tests passing under `-race`.
 - Go binary: `/opt/homebrew/bin/go` (add to PATH in every shell).
 
 **Working directory for all tasks:** `~/Projects/bifrost-tumnus` (will be renamed in Task 2 — `~/Projects/bifrost-tumnus` afterward).
@@ -76,16 +76,16 @@ Expected: no active Go router project named Tumnus. If a direct collision exists
 - [ ] **Step 2: Rename repo and module**
 
 ```bash
-gh repo rename bifrost-tumnus --repo SpaceshipCreative/bifrost-tumnus --yes
+gh repo rename bifrost-tumnus --repo SpaceshipCreative/tumnus --yes
 cd ~/Projects && mv bifrost-tumnus bifrost-tumnus && cd bifrost-tumnus
-git remote set-url origin https://github.com/SpaceshipCreative/bifrost-tumnus.git
-sed -i '' 's|SpaceshipCreative/bifrost-tumnus|SpaceshipCreative/bifrost-tumnus|g' go.mod
+git remote set-url origin https://github.com/SpaceshipCreative/tumnus.git
+sed -i '' 's|SpaceshipCreative/tumnus|SpaceshipCreative/tumnus|g' go.mod
 grep -rl "bifrost-tumnus" --include="*.go" --include="*.md" . | xargs sed -i '' 's/bifrost-tumnus/bifrost-tumnus/g'
 ```
 
 - [ ] **Step 3: Verify and commit**
 
-Run: `go test -race ./... && git add -A && git commit -m "refactor: rename module to github.com/SpaceshipCreative/bifrost-tumnus" && git push`
+Run: `go test -race ./... && git add -A && git commit -m "refactor: rename module to github.com/SpaceshipCreative/tumnus" && git push`
 Expected: tests pass, push succeeds to the renamed repo (GitHub redirects the old URL).
 
 ---
@@ -117,7 +117,7 @@ sed -i '' \
 Then hand-fix: `router/router_test.go` keeps `validRawConfig`, `fakeSupra`, `strPtr`, `userMsg` (used cross-file before; `main_test.go` needs its own copies — copy those four helpers into `main_test.go` verbatim). Struct field names inside `Analysis` (`Domain`, `Complexity`, …) are already exported. In `main.go` add the import and qualify all uses:
 
 ```go
-import routerpkg "github.com/SpaceshipCreative/bifrost-tumnus/router"
+import routerpkg "github.com/SpaceshipCreative/tumnus/router"
 ```
 
 with `routerpkg.ParseConfig`, `routerpkg.Classify`, `routerpkg.ChooseRole`, `routerpkg.DefaultFallbacks`, `routerpkg.ExtractLastUserText`, `*routerpkg.Config` in `pluginState`, `routerpkg.RoleTarget` etc. The doc comment `// Package router implements ...` replaces the old package comment.
@@ -310,7 +310,7 @@ import (
 	"os"
 	"time"
 
-	routerpkg "github.com/SpaceshipCreative/bifrost-tumnus/router"
+	routerpkg "github.com/SpaceshipCreative/tumnus/router"
 )
 
 //go:embed ui.html
@@ -794,13 +794,13 @@ git tag v0.1.0 && git push origin v0.1.0
 - [ ] **Step 2: STOP — confirm with the user before flipping visibility.** Making the repo public is irreversible in effect (module proxy caching). On explicit confirmation:
 
 ```bash
-gh repo edit SpaceshipCreative/bifrost-tumnus --visibility public --accept-visibility-change-consequences
+gh repo edit SpaceshipCreative/tumnus --visibility public --accept-visibility-change-consequences
 ```
 
 - [ ] **Step 3: Verify public module fetch**
 
 ```bash
-cd $(mktemp -d) && GOPROXY=proxy.golang.org go mod download github.com/SpaceshipCreative/bifrost-tumnus@v0.1.0 && echo OK
+cd $(mktemp -d) && GOPROXY=proxy.golang.org go mod download github.com/SpaceshipCreative/tumnus@v0.1.0 && echo OK
 ```
 
 Expected: `OK` (may take a few minutes for proxy indexing; retry once).
