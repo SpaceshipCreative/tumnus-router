@@ -11,8 +11,9 @@ project: an LLM-classified request router that meets every request at the gatewa
 threshold and guides it to the right model. This spec covers three coupled pieces:
 
 1. Full rebrand (plugin, repo, module path) to Tumnus
-2. An embedded configuration UI served by the plugin itself — strictly an add-on,
-   **zero modifications to Bifrost core or its UI**
+2. A standalone dashboard (`tumnus-dashboard`) for configuring the router —
+   strictly an add-on, **zero modifications to Bifrost core or its UI** — that
+   runs on the same machine as the services it manages
 3. Public-release requirements (license, CI, versioning, security defaults,
    documentation, portability contract)
 
@@ -23,7 +24,7 @@ threshold and guides it to the right model. This spec covers three coupled piece
 | Plugin name (`GetName`, config.json entry) | `suprarouter` | `tumnus` |
 | Log/error prefixes | `suprarouter:` | `tumnus:` |
 | Default bypass header | `x-supra-bypass` | `x-tumnus-bypass` |
-| UI route | — | `/tumnus` |
+| Dashboard binary | — | `tumnus-dashboard` (default `127.0.0.1:9090`) |
 | GitHub repo | `SpaceshipCreative/bifrost-suprarouter` | `SpaceshipCreative/bifrost-tumnus` |
 | Go module path | `github.com/SpaceshipCreative/bifrost-suprarouter` | `github.com/SpaceshipCreative/bifrost-tumnus` |
 | Build artifact | `suprarouter.so` | `tumnus.so` |
@@ -38,33 +39,49 @@ Before the rename, do a quick search for existing software projects/trademarks
 named "Tumnus" (low risk — character names for unrelated software are generally
 fine — but cheap insurance against renaming twice).
 
-## 2. Embedded configuration UI
+## 2. Standalone dashboard
 
-### Serving architecture
+**Architecture decision record:** the original design served the UI from the
+plugin's `HTTPTransportPreHook`. Verification against the transport source
+killed that: `TransportInterceptorMiddleware` wraps inference routes only
+(`transports/bifrost-http/server/server.go:1945`), so plugin hooks never fire
+for a browser's `GET /tumnus`. The replacement — and the better fit for the
+project's multi-service future — is a standalone dashboard process that runs on
+the same machine as the services it manages.
 
-The plugin's `HTTPTransportPreHook` (currently a no-op) gains a small router.
-It short-circuits exactly two paths and passes everything else through untouched:
+### Module layout (one Go module, three parts)
 
-- `GET /tumnus` → a single self-contained HTML/JS page embedded via `go:embed`
-  (no framework, no build step; plain `fetch` + a form).
-- `POST /tumnus/api/classify` → body `{"prompt": "..."}`; runs the real
-  `classify` + `chooseRole` against the current atomic state snapshot and returns
-  `{domain, complexity, math, code, route, role, target: {provider, model},
-  fallbacks, latency_ms}`. Classifier failure → JSON error mirroring the
-  fail-open log message. Plugin state nil (mid-reload) → `503` JSON.
-- Any other path → `(nil, nil)` pass-through.
+- `router/` — shared package holding all routing logic, extracted from today's
+  root-package `router.go`: `Config`, `ParseConfig`, `ParseAnalysis`,
+  `ChooseRole`, `DefaultFallbacks`, `Classify`, `ExtractLastUserText` (names
+  exported on extraction).
+- root `package main` — the Bifrost `.so` plugin, now thin glue importing
+  `router/`. Its HTTP transport hooks stay pure no-ops.
+- `cmd/dashboard/` — standalone binary `tumnus-dashboard`, embedding the UI
+  page via `go:embed`.
 
-The UI is gated by config flag `ui_enabled` (**default `false`** — see Security).
-When disabled, the hook is a pure pass-through, identical to today.
+### Dashboard endpoints
 
-### Config persistence — Bifrost stays the source of truth
+- `GET /` → single self-contained HTML/JS page (no framework, no build step).
+- `POST /api/classify` → body `{"prompt": "..."}`; calls the shared
+  `router.Classify` + `router.ChooseRole` directly against the currently-loaded
+  config and returns `{domain, complexity, math, code, route, role,
+  target: {provider, model}, fallbacks, latency_ms}`. Classifier failure →
+  JSON error. No plugin involvement.
+- `GET /api/config` / `PUT /api/config` → server-side proxy to Bifrost's
+  management API (`GET/PUT /api/plugins/tumnus`), preserving
+  `enabled/path/placement/order`. A save persists in Bifrost's store and
+  triggers the plugin hot-reload (`Cleanup` → `Init`), which is already
+  race-safe. The browser never talks to Bifrost directly — no CORS, and the
+  gateway credential lives server-side.
 
-The page's JS reads current config from Bifrost's existing management API
-(`GET /api/plugins/tumnus`, same-origin so the browser's gateway session auth
-applies) and saves via `PUT /api/plugins/tumnus`, preserving
-`enabled/path/placement/order` from the GET. A save persists in Bifrost's store
-and triggers the plugin hot-reload (`Cleanup` → `Init`) path, which is already
-race-safe (atomic state snapshot). The plugin adds **no persistence code**.
+### Dashboard configuration (flags/env)
+
+- `--listen` (default `127.0.0.1:9090`) — localhost-only by default.
+- `--bifrost-url` (e.g. `http://localhost:8080`) and `--bifrost-token`
+  (or `TUMNUS_BIFROST_TOKEN`) for the management API.
+- `--token` (optional): when set, all dashboard endpoints require
+  `x-tumnus-token: <value>`.
 
 ### The page
 
@@ -74,34 +91,32 @@ One HTML file, two panels:
   `timeout_ms`, `max_prompt_chars`, `bypass_header`,
   `frontier_complexity_threshold`) plus four role rows (provider, model,
   optional fallback chain entered as `provider/model` list). Client-side
-  validation mirrors `parseConfig` rules. On save: "saved — plugin reloaded".
+  validation mirrors `ParseConfig` rules. On save: "saved — plugin reloaded".
 - **Test console:** textarea → Classify → verdict rendered as labeled chips
   (domain, complexity, code/math flags), the chosen role/target, and the
   fallback chain. This is the threshold-tuning tool; it exercises the live
   classifier without sending real traffic.
 
-### Known risk, resolved first in the plan
+### Deploy targets (multi-service future, YAGNI-scoped)
 
-Whether `HTTPTransportPreHook` fires for paths Bifrost core doesn't route
-(`/tumnus` would otherwise 404) is unverified. Implementation task #1 is a spike
-against the transport code; fallback is serving under a path pattern the
-transport does expose to plugins. Everything else is prefix-independent.
+The dashboard's config write path is one small interface —
+`type DeployTarget interface { Load(ctx) (map[string]any, error);
+Save(ctx, map[string]any) error }` — with exactly **one** v1 implementation:
+Bifrost via its management API. Future adapters for LiteLLM, OpenCode, Hermes
+Agent, and OpenClaw (config-file writers or their own APIs) slot in behind the
+same interface, each arriving with its own spec. Designed-for, not built.
 
 ## 3. Security posture (public defaults)
 
-The transport pre-hook runs before Bifrost core, so the page and classify
-endpoint are served **without Bifrost's auth**. For a public project the
-defaults must be safe for someone who exposes their gateway:
-
-- `ui_enabled` defaults to **false**. Enabling it is an explicit opt-in.
-- Optional `ui_token` config: when set, `POST /tumnus/api/classify` requires
-  header `x-tumnus-token: <value>`; the page prompts for it and keeps it in
-  memory only. When unset, the endpoint is open (LAN deployments).
-- The static page contains no secrets; config values are fetched by the browser
-  through the authenticated management API, so an unauthenticated visitor sees
-  an empty form.
-- README carries a loud "exposure" section covering the above and the general
-  advice not to expose gateway ports publicly.
+- The dashboard binds `127.0.0.1` by default; exposing it on a LAN/interface is
+  an explicit `--listen` choice.
+- Optional `--token` gates every dashboard endpoint via `x-tumnus-token`.
+- The Bifrost credential is held by the dashboard process, never sent to the
+  browser; the page contains no secrets.
+- The plugin itself serves nothing — its HTTP attack surface is zero.
+- README carries a loud "exposure" section: don't bind the dashboard publicly,
+  use `--token` beyond localhost, and general advice against exposing gateway
+  ports.
 
 ## 4. Public release requirements
 
@@ -188,10 +203,14 @@ Each future adapter is its own repo (`litellm-tumnus`, etc.) implementing
 
 ## Testing
 
-- Go tests via the exported hook: `GET /tumnus` returns the embedded HTML;
-  classify endpoint happy path / classifier-down / nil-state / `ui_enabled=false`
-  / `ui_token` enforcement; non-Tumnus paths pass through byte-identical;
-  rename regressions (`GetName() == "tumnus"`, default header).
+- `router/` package: the existing unit suite moves with the extraction and
+  keeps passing unchanged in behavior.
+- Dashboard (`httptest` against its handler): `GET /` returns the embedded
+  HTML; classify endpoint happy path / classifier-down; config proxy round-trip
+  against a fake Bifrost management API (preserves `enabled/path/placement/
+  order`); `--token` enforcement (401 without header when set).
+- Plugin: rename regressions (`GetName() == "tumnus"`, default bypass header
+  `x-tumnus-bypass`); transport hooks remain no-ops.
 - Existing 20-test suite continues to pass under `-race` after the rename.
 - CI runs the full suite on both platforms.
 - Manual: browser once-over of the page against a live gateway (form load, save
