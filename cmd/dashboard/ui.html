@@ -1,1 +1,98 @@
-<html>tumnus</html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tumnus</title>
+<style>
+ :root{color-scheme:dark light}
+ body{font:14px/1.5 system-ui;max-width:760px;margin:2rem auto;padding:0 1rem}
+ h1{font-size:1.3rem} h2{font-size:1rem;margin-top:2rem}
+ fieldset{border:1px solid #8884;border-radius:8px;margin:.8rem 0;padding:.8rem}
+ label{display:block;margin:.4rem 0 .1rem;font-weight:600}
+ input,textarea{width:100%;box-sizing:border-box;padding:.4rem;border:1px solid #8886;border-radius:6px;background:transparent;color:inherit}
+ .row{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:.5rem}
+ button{margin-top:.8rem;padding:.5rem 1.2rem;border-radius:6px;border:1px solid #8886;cursor:pointer}
+ .chips span{display:inline-block;border:1px solid #8886;border-radius:999px;padding:.1rem .6rem;margin:.15rem}
+ #status,#verdict{margin-top:.6rem;white-space:pre-wrap}
+ .err{color:#e66}
+</style>
+</head>
+<body>
+<h1>Tumnus <small>— router control panel</small></h1>
+
+<h2>Configuration</h2>
+<form id="cfg">
+ <fieldset>
+  <label>Classifier endpoint <input name="endpoint" required></label>
+  <label>Router model <input name="router_model"></label>
+  <div class="row">
+   <label>Timeout (ms) <input name="timeout_ms" type="number" min="1"></label>
+   <label>Max prompt chars <input name="max_prompt_chars" type="number" min="1"></label>
+   <label>Frontier threshold (1-5) <input name="frontier_complexity_threshold" type="number" min="1" max="5"></label>
+  </div>
+  <label>Bypass header <input name="bypass_header"></label>
+ </fieldset>
+ <fieldset id="roles"><legend>Roles</legend></fieldset>
+ <button>Save</button><div id="status"></div>
+</form>
+
+<h2>Test console</h2>
+<textarea id="prompt" rows="3" placeholder="Paste a prompt to see where it routes"></textarea>
+<button id="run">Classify</button>
+<div id="verdict"></div>
+
+<script>
+const ROLES=["local_small","local_big","code_cheap","frontier"];
+const $=q=>document.querySelector(q);
+const hdrs=()=>{const t=sessionStorage.tumnusToken;return t?{"x-tumnus-token":t}:{ }};
+async function api(path,opts={}){
+ const r=await fetch(path,{...opts,headers:{"Content-Type":"application/json",...hdrs(),...(opts.headers||{})}});
+ if(r.status===401){sessionStorage.tumnusToken=prompt("Dashboard token:")||"";return api(path,opts);}
+ const j=await r.json().catch(()=>({}));
+ if(!r.ok)throw new Error(j.error||r.status);
+ return j;
+}
+function roleRows(cfg){
+ $("#roles").innerHTML='<legend>Roles</legend>'+ROLES.map(r=>{
+  const t=(cfg.roles||{})[r]||{};
+  const fb=(t.fallbacks||[]).map(f=>`${f.provider}/${f.model}`).join(", ");
+  return `<div class="row" data-role="${r}">
+   <label>${r} provider <input data-k="provider" value="${t.provider||""}" required></label>
+   <label>model <input data-k="model" value="${t.model||""}" required></label>
+   <label>fallbacks (provider/model, …) <input data-k="fb" value="${fb}"></label></div>`;
+ }).join("");
+}
+function readForm(){
+ const f=new FormData($("#cfg")),cfg={
+  endpoint:f.get("endpoint"),router_model:f.get("router_model"),
+  bypass_header:f.get("bypass_header"),
+  timeout_ms:+f.get("timeout_ms"),max_prompt_chars:+f.get("max_prompt_chars"),
+  frontier_complexity_threshold:+f.get("frontier_complexity_threshold"),roles:{}};
+ for(const div of document.querySelectorAll("#roles [data-role]")){
+  const g=k=>div.querySelector(`[data-k="${k}"]`).value.trim();
+  const fb=g("fb")?g("fb").split(",").map(s=>{const[p,...m]=s.trim().split("/");return{provider:p,model:m.join("/")}}):[];
+  cfg.roles[div.dataset.role]={provider:g("provider"),model:g("model"),...(fb.length?{fallbacks:fb}:{})};
+ }
+ return cfg;
+}
+async function load(){
+ try{const cfg=await api("/api/config");
+  for(const k of["endpoint","router_model","bypass_header","timeout_ms","max_prompt_chars","frontier_complexity_threshold"])
+   if(cfg[k]!=null)$(`[name="${k}"]`).value=cfg[k];
+  roleRows(cfg);
+ }catch(e){$("#status").textContent="load failed: "+e.message;$("#status").className="err";roleRows({});}
+}
+$("#cfg").onsubmit=async e=>{e.preventDefault();const s=$("#status");s.className="";
+ try{await api("/api/config",{method:"PUT",body:JSON.stringify(readForm())});s.textContent="saved — plugin reloaded";}
+ catch(err){s.textContent="save failed: "+err.message;s.className="err";}};
+$("#run").onclick=async()=>{const v=$("#verdict");v.className="";
+ try{const r=await api("/api/classify",{method:"POST",body:JSON.stringify({prompt:$("#prompt").value})});
+  v.innerHTML=`<div class="chips"><span>domain: ${r.domain||"—"}</span><span>complexity: ${r.complexity}</span>
+   <span>code: ${r.code}</span><span>math: ${r.math}</span><span>route: ${r.route}</span></div>
+   → <b>${r.role}</b>: ${r.target.provider}/${r.target.model}
+   (fallbacks: ${(r.fallbacks||[]).map(f=>f.provider+"/"+f.model).join(" → ")||"none"}) — ${r.latency_ms} ms`;
+ }catch(err){v.textContent="classify failed: "+err.message;v.className="err";}};
+load();
+</script>
+</body>
+</html>
