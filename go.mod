@@ -2,7 +2,7 @@ module github.com/SpaceshipCreative/bifrost-tumnus
 
 go 1.26.4
 
-require github.com/maximhq/bifrost/core v1.6.4-0.20260714002449-d48dea621f55
+require github.com/maximhq/bifrost/core v1.7.0
 
 require (
 	github.com/andybalholm/brotli v1.2.2 // indirect
