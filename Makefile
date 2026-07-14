@@ -1,10 +1,10 @@
 .PHONY: build test clean
 
 build:
-	go build -buildmode=plugin -o suprarouter.so .
+	go build -buildmode=plugin -o tumnus.so .
 
 test:
 	go test ./...
 
 clean:
-	rm -f suprarouter.so
+	rm -f tumnus.so

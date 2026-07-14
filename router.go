@@ -48,28 +48,28 @@ type Config struct {
 func parseConfig(raw any) (*Config, error) {
 	buf, err := json.Marshal(raw)
 	if err != nil {
-		return nil, fmt.Errorf("suprarouter: cannot marshal config: %w", err)
+		return nil, fmt.Errorf("tumnus: cannot marshal config: %w", err)
 	}
 	cfg := &Config{
 		RouterModel:                 "SupraLabs/Supra-Router-51M",
 		TimeoutMs:                   150,
 		MaxPromptChars:              4000,
-		BypassHeader:                "x-supra-bypass",
+		BypassHeader:                "x-tumnus-bypass",
 		FrontierComplexityThreshold: 5,
 	}
 	if err := json.Unmarshal(buf, cfg); err != nil {
-		return nil, fmt.Errorf("suprarouter: invalid config: %w", err)
+		return nil, fmt.Errorf("tumnus: invalid config: %w", err)
 	}
 	if cfg.Endpoint == "" {
-		return nil, fmt.Errorf("suprarouter: endpoint is required")
+		return nil, fmt.Errorf("tumnus: endpoint is required")
 	}
 	if cfg.FrontierComplexityThreshold < 1 || cfg.FrontierComplexityThreshold > 5 {
-		return nil, fmt.Errorf("suprarouter: frontier_complexity_threshold must be 1-5, got %d", cfg.FrontierComplexityThreshold)
+		return nil, fmt.Errorf("tumnus: frontier_complexity_threshold must be 1-5, got %d", cfg.FrontierComplexityThreshold)
 	}
 	for _, role := range allRoles {
 		target, ok := cfg.Roles[role]
 		if !ok || target.Provider == "" || target.Model == "" {
-			return nil, fmt.Errorf("suprarouter: roles.%s with provider and model is required", role)
+			return nil, fmt.Errorf("tumnus: roles.%s with provider and model is required", role)
 		}
 	}
 	return cfg, nil
@@ -115,7 +115,7 @@ func parseAnalysis(s string) (*analysis, error) {
 		}
 	}
 	if a.Route == "" {
-		return nil, fmt.Errorf("suprarouter: no Route field in analysis %q", s)
+		return nil, fmt.Errorf("tumnus: no Route field in analysis %q", s)
 	}
 	return a, nil
 }
@@ -198,7 +198,7 @@ func classify(ctx context.Context, client *http.Client, cfg *Config, prompt stri
 	if resp.StatusCode != http.StatusOK {
 		// Drain (bounded) so the connection returns to the idle pool.
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("suprarouter: classifier returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("tumnus: classifier returned status %d", resp.StatusCode)
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
@@ -206,10 +206,10 @@ func classify(ctx context.Context, client *http.Client, cfg *Config, prompt stri
 	}
 	var cr completionResponse
 	if err := json.Unmarshal(raw, &cr); err != nil {
-		return nil, fmt.Errorf("suprarouter: bad classifier response: %w", err)
+		return nil, fmt.Errorf("tumnus: bad classifier response: %w", err)
 	}
 	if len(cr.Choices) == 0 {
-		return nil, fmt.Errorf("suprarouter: classifier returned no choices")
+		return nil, fmt.Errorf("tumnus: classifier returned no choices")
 	}
 	return parseAnalysis(cr.Choices[0].Text)
 }

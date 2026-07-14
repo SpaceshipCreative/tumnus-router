@@ -28,7 +28,7 @@ func TestParseConfigDefaults(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.TimeoutMs != 150 || cfg.MaxPromptChars != 4000 ||
-		cfg.BypassHeader != "x-supra-bypass" || cfg.FrontierComplexityThreshold != 5 ||
+		cfg.BypassHeader != "x-tumnus-bypass" || cfg.FrontierComplexityThreshold != 5 ||
 		cfg.RouterModel != "SupraLabs/Supra-Router-51M" {
 		t.Fatalf("defaults not applied: %+v", cfg)
 	}

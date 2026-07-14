@@ -43,7 +43,7 @@ func Init(rawConfig any) error {
 
 // GetName returns the plugin's system identifier.
 func GetName() string {
-	return "suprarouter"
+	return "tumnus"
 }
 
 // PreRequestHook classifies the chat request with Supra-Router-51M and routes
@@ -60,7 +60,7 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 		return nil
 	}
 	if headers, _ := ctx.Value(schemas.BifrostContextKeyRequestHeaders).(map[string]string); headers[cfg.BypassHeader] == "true" {
-		ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelInfo, "suprarouter: bypass header set, skipping")
+		ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelInfo, "tumnus: bypass header set, skipping")
 		return nil
 	}
 	text := extractLastUserText(req.ChatRequest.Input, cfg.MaxPromptChars)
@@ -75,7 +75,7 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 	if err != nil {
 		// Fail open: never block or reroute a request we could not classify.
 		ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelWarn,
-			fmt.Sprintf("suprarouter: classification failed, passing through unchanged: %v", err))
+			fmt.Sprintf("tumnus: classification failed, passing through unchanged: %v", err))
 		return nil
 	}
 
@@ -90,7 +90,7 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 	}
 
 	ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelInfo,
-		fmt.Sprintf("suprarouter: domain=%q complexity=%d code=%t math=%t route=%q -> role=%s target=%s/%s (classified in %s)",
+		fmt.Sprintf("tumnus: domain=%q complexity=%d code=%t math=%t route=%q -> role=%s target=%s/%s (classified in %s)",
 			a.Domain, a.Complexity, a.Code, a.Math, a.Route, role, target.Provider, target.Model, time.Since(start).Round(time.Millisecond)))
 	return nil
 }

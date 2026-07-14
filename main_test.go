@@ -63,7 +63,7 @@ func TestPreRequestHookFailOpenOnTimeout(t *testing.T) {
 func TestPreRequestHookBypassHeader(t *testing.T) {
 	setupPlugin(t, "Domain: x | Complexity: 1 | Math: False | Code: False | Route: small model", 0)
 	ctx := newCtx()
-	ctx.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{"x-supra-bypass": "true"})
+	ctx.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{"x-tumnus-bypass": "true"})
 	req := chatRequest("hello")
 	if err := PreRequestHook(ctx, req); err != nil {
 		t.Fatal(err)
@@ -89,5 +89,18 @@ func TestPreRequestHookRoutesSmall(t *testing.T) {
 	}
 	if string(req.ChatRequest.Provider) != "vllm-local" || req.ChatRequest.Model != "qwen3.6-35b-a3b" {
 		t.Fatalf("wrong target: %s/%s", req.ChatRequest.Provider, req.ChatRequest.Model)
+	}
+}
+
+func TestRebrand(t *testing.T) {
+	if GetName() != "tumnus" {
+		t.Fatalf("GetName() = %q, want tumnus", GetName())
+	}
+	cfg, err := parseConfig(validRawConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BypassHeader != "x-tumnus-bypass" {
+		t.Fatalf("default bypass header = %q", cfg.BypassHeader)
 	}
 }
