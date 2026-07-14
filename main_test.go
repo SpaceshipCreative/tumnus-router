@@ -2,11 +2,41 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	routerpkg "github.com/SpaceshipCreative/bifrost-tumnus/router"
 	"github.com/maximhq/bifrost/core/schemas"
 )
+
+func validRawConfig() map[string]any {
+	return map[string]any{
+		"endpoint": "http://spark-1:8000/v1/completions",
+		"roles": map[string]any{
+			"local_small": map[string]any{"provider": "vllm-local", "model": "qwen3.6-35b-a3b"},
+			"local_big":   map[string]any{"provider": "vllm-local", "model": "deepseek-v4-flash"},
+			"code_cheap":  map[string]any{"provider": "ollama-cloud", "model": "glm-5.2"},
+			"frontier":    map[string]any{"provider": "anthropic", "model": "claude-fable-5"},
+		},
+	}
+}
+
+func fakeSupra(t *testing.T, analysisText string, delay time.Duration) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(delay)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"text":"` + analysisText + `"}]}`))
+	}))
+}
+
+func strPtr(s string) *string { return &s }
+
+func userMsg(content schemas.ChatMessageContent) schemas.ChatMessage {
+	return schemas.ChatMessage{Role: schemas.ChatMessageRoleUser, Content: &content}
+}
 
 func chatRequest(text string) *schemas.BifrostRequest {
 	return &schemas.BifrostRequest{
@@ -92,11 +122,38 @@ func TestPreRequestHookRoutesSmall(t *testing.T) {
 	}
 }
 
+// TestConcurrentInitCleanupHook is the -race regression test for the
+// snapshot-based plugin state: hooks racing Init/Cleanup must neither race
+// nor panic, and must fail open when the plugin is torn down mid-flight.
+func TestConcurrentInitCleanupHook(t *testing.T) {
+	srv := fakeSupra(t, "Domain: x | Complexity: 1 | Math: False | Code: False | Route: small model", 0)
+	defer srv.Close()
+	raw := validRawConfig()
+	raw["endpoint"] = srv.URL
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			_ = Init(raw)
+			_ = Cleanup()
+		}
+	}()
+	for i := 0; i < 200; i++ {
+		req := chatRequest("hello")
+		if err := PreRequestHook(newCtx(), req); err != nil {
+			t.Errorf("hook returned error under churn: %v", err)
+		}
+	}
+	<-done
+	_ = Cleanup()
+}
+
 func TestRebrand(t *testing.T) {
 	if GetName() != "tumnus" {
 		t.Fatalf("GetName() = %q, want tumnus", GetName())
 	}
-	cfg, err := parseConfig(validRawConfig())
+	cfg, err := routerpkg.ParseConfig(validRawConfig())
 	if err != nil {
 		t.Fatal(err)
 	}

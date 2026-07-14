@@ -1,6 +1,7 @@
-// Package main implements the Supra Router Bifrost plugin: it classifies chat
-// requests with SupraLabs/Supra-Router-51M and routes them to role-assigned models.
-package main
+// Package router implements Tumnus's shared routing logic: it classifies chat
+// requests with a router model (default SupraLabs/Supra-Router-51M) and maps
+// the verdict to a role-assigned target model.
+package router
 
 import (
 	"bytes"
@@ -16,13 +17,13 @@ import (
 )
 
 const (
-	roleLocalSmall = "local_small"
-	roleLocalBig   = "local_big"
-	roleCodeCheap  = "code_cheap"
-	roleFrontier   = "frontier"
+	RoleLocalSmall = "local_small"
+	RoleLocalBig   = "local_big"
+	RoleCodeCheap  = "code_cheap"
+	RoleFrontier   = "frontier"
 )
 
-var allRoles = []string{roleLocalSmall, roleLocalBig, roleCodeCheap, roleFrontier}
+var AllRoles = []string{RoleLocalSmall, RoleLocalBig, RoleCodeCheap, RoleFrontier}
 
 // RoleTarget is the provider/model a routing role resolves to.
 type RoleTarget struct {
@@ -42,10 +43,10 @@ type Config struct {
 	Roles                       map[string]RoleTarget `json:"roles"`
 }
 
-// parseConfig converts the raw config (map[string]any from config.json) into a
+// ParseConfig converts the raw config (map[string]any from config.json) into a
 // validated Config with defaults applied. Fails fast so bad config surfaces at
 // plugin load, never at request time.
-func parseConfig(raw any) (*Config, error) {
+func ParseConfig(raw any) (*Config, error) {
 	buf, err := json.Marshal(raw)
 	if err != nil {
 		return nil, fmt.Errorf("tumnus: cannot marshal config: %w", err)
@@ -66,7 +67,7 @@ func parseConfig(raw any) (*Config, error) {
 	if cfg.FrontierComplexityThreshold < 1 || cfg.FrontierComplexityThreshold > 5 {
 		return nil, fmt.Errorf("tumnus: frontier_complexity_threshold must be 1-5, got %d", cfg.FrontierComplexityThreshold)
 	}
-	for _, role := range allRoles {
+	for _, role := range AllRoles {
 		target, ok := cfg.Roles[role]
 		if !ok || target.Provider == "" || target.Model == "" {
 			return nil, fmt.Errorf("tumnus: roles.%s with provider and model is required", role)
@@ -75,8 +76,8 @@ func parseConfig(raw any) (*Config, error) {
 	return cfg, nil
 }
 
-// analysis is Supra-Router-51M's structured verdict for one prompt.
-type analysis struct {
+// Analysis is Supra-Router-51M's structured verdict for one prompt.
+type Analysis struct {
 	Domain     string
 	Complexity int
 	Math       bool
@@ -84,13 +85,13 @@ type analysis struct {
 	Route      string // "small model" or "big model"
 }
 
-// parseAnalysis parses the model's pipe-separated output, e.g.:
+// ParseAnalysis parses the model's pipe-separated output, e.g.:
 //
 //	Domain: poetry | Complexity: 1 | Math: False | Code: False | Route: small model | Justification: ...
 //
 // Route is required; other fields default to zero values when absent.
-func parseAnalysis(s string) (*analysis, error) {
-	a := &analysis{}
+func ParseAnalysis(s string) (*Analysis, error) {
+	a := &Analysis{}
 	for _, part := range strings.Split(s, "|") {
 		key, value, found := strings.Cut(part, ":")
 		if !found {
@@ -115,29 +116,29 @@ func parseAnalysis(s string) (*analysis, error) {
 		}
 	}
 	if a.Route == "" {
-		return nil, fmt.Errorf("tumnus: no Route field in analysis %q", s)
+		return nil, fmt.Errorf("tumnus: no Route field in Analysis %q", s)
 	}
 	return a, nil
 }
 
-// chooseRole maps a Supra analysis to a routing role. The ladder is fixed by
+// ChooseRole maps a Supra Analysis to a routing role. The ladder is fixed by
 // design (spec: "the ladder is code, not config"); first match wins.
-func chooseRole(a *analysis, frontierThreshold int) string {
+func ChooseRole(a *Analysis, frontierThreshold int) string {
 	switch {
 	case a.Code && a.Complexity >= frontierThreshold:
-		return roleFrontier
+		return RoleFrontier
 	case a.Code:
-		return roleCodeCheap
+		return RoleCodeCheap
 	case strings.Contains(a.Route, "big") || a.Math:
-		return roleLocalBig
+		return RoleLocalBig
 	default:
-		return roleLocalSmall
+		return RoleLocalSmall
 	}
 }
 
-// defaultFallbacks derives a role's fallback chain from the other roles'
+// DefaultFallbacks derives a role's fallback chain from the other roles'
 // assignments, per the spec's ladder table.
-func defaultFallbacks(role string, roles map[string]RoleTarget) []schemas.Fallback {
+func DefaultFallbacks(role string, roles map[string]RoleTarget) []schemas.Fallback {
 	fb := func(names ...string) []schemas.Fallback {
 		out := make([]schemas.Fallback, 0, len(names))
 		for _, n := range names {
@@ -147,14 +148,14 @@ func defaultFallbacks(role string, roles map[string]RoleTarget) []schemas.Fallba
 		return out
 	}
 	switch role {
-	case roleFrontier:
-		return fb(roleCodeCheap)
-	case roleCodeCheap:
-		return fb(roleFrontier)
-	case roleLocalBig:
-		return fb(roleCodeCheap, roleFrontier)
-	default: // roleLocalSmall
-		return fb(roleLocalBig)
+	case RoleFrontier:
+		return fb(RoleCodeCheap)
+	case RoleCodeCheap:
+		return fb(RoleFrontier)
+	case RoleLocalBig:
+		return fb(RoleCodeCheap, RoleFrontier)
+	default: // RoleLocalSmall
+		return fb(RoleLocalBig)
 	}
 }
 
@@ -173,9 +174,9 @@ type completionResponse struct {
 	} `json:"choices"`
 }
 
-// classify sends the prompt to the Supra vLLM endpoint using the model card's
+// Classify sends the prompt to the Supra vLLM endpoint using the model card's
 // template ("Task: <prompt>\nAnalysis: ", greedy decoding) and parses the verdict.
-func classify(ctx context.Context, client *http.Client, cfg *Config, prompt string) (*analysis, error) {
+func Classify(ctx context.Context, client *http.Client, cfg *Config, prompt string) (*Analysis, error) {
 	body, err := json.Marshal(completionRequest{
 		Model:       cfg.RouterModel,
 		Prompt:      "Task: " + prompt + "\nAnalysis: ",
@@ -211,13 +212,13 @@ func classify(ctx context.Context, client *http.Client, cfg *Config, prompt stri
 	if len(cr.Choices) == 0 {
 		return nil, fmt.Errorf("tumnus: classifier returned no choices")
 	}
-	return parseAnalysis(cr.Choices[0].Text)
+	return ParseAnalysis(cr.Choices[0].Text)
 }
 
-// extractLastUserText returns the text of the most recent user message,
+// ExtractLastUserText returns the text of the most recent user message,
 // joining text blocks with newlines and ignoring non-text blocks, truncated
-// to maxChars. Returns "" when there is nothing to classify.
-func extractLastUserText(msgs []schemas.ChatMessage, maxChars int) string {
+// to maxChars. Returns "" when there is nothing to Classify.
+func ExtractLastUserText(msgs []schemas.ChatMessage, maxChars int) string {
 	for i := len(msgs) - 1; i >= 0; i-- {
 		msg := msgs[i]
 		if msg.Role != schemas.ChatMessageRoleUser || msg.Content == nil {

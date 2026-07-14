@@ -1,4 +1,4 @@
-package main
+package router
 
 import (
 	"context"
@@ -23,7 +23,7 @@ func validRawConfig() map[string]any {
 }
 
 func TestParseConfigDefaults(t *testing.T) {
-	cfg, err := parseConfig(validRawConfig())
+	cfg, err := ParseConfig(validRawConfig())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestParseConfigInvalid(t *testing.T) {
 	for name, mutate := range cases {
 		raw := validRawConfig()
 		mutate(raw)
-		if _, err := parseConfig(raw); err == nil {
+		if _, err := ParseConfig(raw); err == nil {
 			t.Errorf("%s: expected error, got nil", name)
 		}
 	}
@@ -51,7 +51,7 @@ func TestParseConfigInvalid(t *testing.T) {
 
 func TestParseAnalysis(t *testing.T) {
 	out := "Domain: software engineering | Complexity: 4 | Math: False | Code: True | Route: big model | Justification: multi-step code task"
-	a, err := parseAnalysis(out)
+	a, err := ParseAnalysis(out)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -62,14 +62,14 @@ func TestParseAnalysis(t *testing.T) {
 
 func TestParseAnalysisGarbage(t *testing.T) {
 	for _, s := range []string{"", "hello world"} {
-		if _, err := parseAnalysis(s); err == nil {
+		if _, err := ParseAnalysis(s); err == nil {
 			t.Errorf("%q: expected error, got nil", s)
 		}
 	}
 }
 
 func TestParseAnalysisMalformedComplexityIsOptional(t *testing.T) {
-	a, err := parseAnalysis("Domain: x | Complexity: banana | Route: small model")
+	a, err := ParseAnalysis("Domain: x | Complexity: banana | Route: small model")
 	if err != nil {
 		t.Fatalf("malformed optional field should not fail the verdict: %v", err)
 	}
@@ -78,35 +78,8 @@ func TestParseAnalysisMalformedComplexityIsOptional(t *testing.T) {
 	}
 }
 
-// TestConcurrentInitCleanupHook is the -race regression test for the
-// snapshot-based plugin state: hooks racing Init/Cleanup must neither race
-// nor panic, and must fail open when the plugin is torn down mid-flight.
-func TestConcurrentInitCleanupHook(t *testing.T) {
-	srv := fakeSupra(t, "Domain: x | Complexity: 1 | Math: False | Code: False | Route: small model", 0)
-	defer srv.Close()
-	raw := validRawConfig()
-	raw["endpoint"] = srv.URL
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for i := 0; i < 200; i++ {
-			_ = Init(raw)
-			_ = Cleanup()
-		}
-	}()
-	for i := 0; i < 200; i++ {
-		req := chatRequest("hello")
-		if err := PreRequestHook(newCtx(), req); err != nil {
-			t.Errorf("hook returned error under churn: %v", err)
-		}
-	}
-	<-done
-	_ = Cleanup()
-}
-
 func TestParseAnalysisMissingRoute(t *testing.T) {
-	if _, err := parseAnalysis("Domain: x | Complexity: 2 | Math: False | Code: False"); err == nil {
+	if _, err := ParseAnalysis("Domain: x | Complexity: 2 | Math: False | Code: False"); err == nil {
 		t.Error("expected error for missing Route field")
 	}
 }
@@ -114,38 +87,38 @@ func TestParseAnalysisMissingRoute(t *testing.T) {
 func TestChooseRole(t *testing.T) {
 	cases := []struct {
 		name string
-		a    analysis
+		a    Analysis
 		want string
 	}{
-		{"frontier code", analysis{Code: true, Complexity: 5, Route: "big model"}, roleFrontier},
-		{"code below threshold", analysis{Code: true, Complexity: 4, Route: "big model"}, roleCodeCheap},
-		{"big route", analysis{Route: "big model", Complexity: 3}, roleLocalBig},
-		{"math forces big", analysis{Math: true, Route: "small model", Complexity: 2}, roleLocalBig},
-		{"small route", analysis{Route: "small model", Complexity: 1}, roleLocalSmall},
+		{"frontier code", Analysis{Code: true, Complexity: 5, Route: "big model"}, RoleFrontier},
+		{"code below threshold", Analysis{Code: true, Complexity: 4, Route: "big model"}, RoleCodeCheap},
+		{"big route", Analysis{Route: "big model", Complexity: 3}, RoleLocalBig},
+		{"math forces big", Analysis{Math: true, Route: "small model", Complexity: 2}, RoleLocalBig},
+		{"small route", Analysis{Route: "small model", Complexity: 1}, RoleLocalSmall},
 	}
 	for _, tc := range cases {
-		if got := chooseRole(&tc.a, 5); got != tc.want {
+		if got := ChooseRole(&tc.a, 5); got != tc.want {
 			t.Errorf("%s: got %s, want %s", tc.name, got, tc.want)
 		}
 	}
 }
 
 func TestDefaultFallbacks(t *testing.T) {
-	cfg, err := parseConfig(validRawConfig())
+	cfg, err := ParseConfig(validRawConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := defaultFallbacks(roleLocalBig, cfg.Roles)
+	got := DefaultFallbacks(RoleLocalBig, cfg.Roles)
 	if len(got) != 2 || got[0].Model != "glm-5.2" || got[1].Model != "claude-fable-5" {
 		t.Fatalf("local_big fallbacks wrong: %+v", got)
 	}
-	if got := defaultFallbacks(roleLocalSmall, cfg.Roles); len(got) != 1 || got[0].Model != "deepseek-v4-flash" {
+	if got := DefaultFallbacks(RoleLocalSmall, cfg.Roles); len(got) != 1 || got[0].Model != "deepseek-v4-flash" {
 		t.Fatalf("local_small fallbacks wrong: %+v", got)
 	}
-	if got := defaultFallbacks(roleFrontier, cfg.Roles); len(got) != 1 || got[0].Model != "glm-5.2" {
+	if got := DefaultFallbacks(RoleFrontier, cfg.Roles); len(got) != 1 || got[0].Model != "glm-5.2" {
 		t.Fatalf("frontier fallbacks wrong: %+v", got)
 	}
-	if got := defaultFallbacks(roleCodeCheap, cfg.Roles); len(got) != 1 || got[0].Model != "claude-fable-5" {
+	if got := DefaultFallbacks(RoleCodeCheap, cfg.Roles); len(got) != 1 || got[0].Model != "claude-fable-5" {
 		t.Fatalf("code_cheap fallbacks wrong: %+v", got)
 	}
 }
@@ -162,25 +135,25 @@ func fakeSupra(t *testing.T, analysisText string, delay time.Duration) *httptest
 func TestClassify(t *testing.T) {
 	srv := fakeSupra(t, "Domain: math | Complexity: 5 | Math: True | Code: False | Route: big model", 0)
 	defer srv.Close()
-	cfg, _ := parseConfig(validRawConfig())
+	cfg, _ := ParseConfig(validRawConfig())
 	cfg.Endpoint = srv.URL
-	a, err := classify(context.Background(), srv.Client(), cfg, "prove Fermat's little theorem")
+	a, err := Classify(context.Background(), srv.Client(), cfg, "prove Fermat's little theorem")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !a.Math || a.Complexity != 5 {
-		t.Fatalf("bad analysis: %+v", a)
+		t.Fatalf("bad Analysis: %+v", a)
 	}
 }
 
 func TestClassifyTimeout(t *testing.T) {
 	srv := fakeSupra(t, "Domain: x | Route: small model", 300*time.Millisecond)
 	defer srv.Close()
-	cfg, _ := parseConfig(validRawConfig())
+	cfg, _ := ParseConfig(validRawConfig())
 	cfg.Endpoint = srv.URL
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	if _, err := classify(ctx, srv.Client(), cfg, "hi"); err == nil {
+	if _, err := Classify(ctx, srv.Client(), cfg, "hi"); err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}
 }
@@ -190,9 +163,9 @@ func TestClassifyBadStatus(t *testing.T) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	cfg, _ := parseConfig(validRawConfig())
+	cfg, _ := ParseConfig(validRawConfig())
 	cfg.Endpoint = srv.URL
-	if _, err := classify(context.Background(), srv.Client(), cfg, "hi"); err == nil {
+	if _, err := Classify(context.Background(), srv.Client(), cfg, "hi"); err == nil {
 		t.Fatal("expected error on 500, got nil")
 	}
 }
@@ -209,7 +182,7 @@ func TestExtractLastUserText(t *testing.T) {
 		{Role: schemas.ChatMessageRoleAssistant, Content: &schemas.ChatMessageContent{ContentStr: strPtr("answer")}},
 		userMsg(schemas.ChatMessageContent{ContentStr: strPtr("second question")}),
 	}
-	if got := extractLastUserText(msgs, 4000); got != "second question" {
+	if got := ExtractLastUserText(msgs, 4000); got != "second question" {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -222,17 +195,17 @@ func TestExtractLastUserTextBlocks(t *testing.T) {
 			{Type: schemas.ChatContentBlockTypeText, Text: strPtr("part two")},
 		}}),
 	}
-	if got := extractLastUserText(msgs, 4000); got != "part one\npart two" {
+	if got := ExtractLastUserText(msgs, 4000); got != "part one\npart two" {
 		t.Fatalf("got %q", got)
 	}
 }
 
 func TestExtractLastUserTextTruncationAndEmpty(t *testing.T) {
 	long := userMsg(schemas.ChatMessageContent{ContentStr: strPtr("abcdefghij")})
-	if got := extractLastUserText([]schemas.ChatMessage{long}, 4); got != "abcd" {
+	if got := ExtractLastUserText([]schemas.ChatMessage{long}, 4); got != "abcd" {
 		t.Fatalf("truncation: got %q", got)
 	}
-	if got := extractLastUserText(nil, 4000); got != "" {
+	if got := ExtractLastUserText(nil, 4000); got != "" {
 		t.Fatalf("empty: got %q", got)
 	}
 }

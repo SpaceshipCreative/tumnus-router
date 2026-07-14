@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	routerpkg "github.com/SpaceshipCreative/bifrost-tumnus/router"
 	"github.com/maximhq/bifrost/core/schemas"
 )
 
@@ -14,7 +15,7 @@ import (
 // single atomic load. Bifrost may call Cleanup/Init (unload/reload) while
 // requests are in flight; hooks must never observe a half-torn-down state.
 type pluginState struct {
-	cfg    *Config
+	cfg    *routerpkg.Config
 	client *http.Client
 }
 
@@ -22,7 +23,7 @@ var state atomic.Pointer[pluginState]
 
 // Init parses and validates the plugin config. Invalid config fails the load.
 func Init(rawConfig any) error {
-	parsed, err := parseConfig(rawConfig)
+	parsed, err := routerpkg.ParseConfig(rawConfig)
 	if err != nil {
 		return err
 	}
@@ -63,7 +64,7 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 		ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelInfo, "tumnus: bypass header set, skipping")
 		return nil
 	}
-	text := extractLastUserText(req.ChatRequest.Input, cfg.MaxPromptChars)
+	text := routerpkg.ExtractLastUserText(req.ChatRequest.Input, cfg.MaxPromptChars)
 	if text == "" {
 		return nil
 	}
@@ -71,7 +72,7 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 	cctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutMs)*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	a, err := classify(cctx, s.client, cfg, text)
+	a, err := routerpkg.Classify(cctx, s.client, cfg, text)
 	if err != nil {
 		// Fail open: never block or reroute a request we could not classify.
 		ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelWarn,
@@ -79,14 +80,14 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 		return nil
 	}
 
-	role := chooseRole(a, cfg.FrontierComplexityThreshold)
+	role := routerpkg.ChooseRole(a, cfg.FrontierComplexityThreshold)
 	target := cfg.Roles[role]
 	req.ChatRequest.Provider = schemas.ModelProvider(target.Provider)
 	req.ChatRequest.Model = target.Model
 	if len(target.Fallbacks) > 0 {
 		req.ChatRequest.Fallbacks = target.Fallbacks
 	} else {
-		req.ChatRequest.Fallbacks = defaultFallbacks(role, cfg.Roles)
+		req.ChatRequest.Fallbacks = routerpkg.DefaultFallbacks(role, cfg.Roles)
 	}
 
 	ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelInfo,
