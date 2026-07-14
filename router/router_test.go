@@ -239,3 +239,15 @@ func TestTruncatePromptRuneAware(t *testing.T) {
 		t.Fatalf("extract: got %q", got)
 	}
 }
+
+func TestParseAnalysisUnknownRouteFailsOpen(t *testing.T) {
+	for _, s := range []string{
+		"Domain: x | Route: banana",
+		"Domain: x | Route: not big",
+		"Domain: x | Complexity: 3",
+	} {
+		if _, err := ParseAnalysis(s); err == nil {
+			t.Errorf("%q: expected error (must fail open on unknown Route), got nil", s)
+		}
+	}
+}

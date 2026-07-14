@@ -194,3 +194,32 @@ func TestListenAllowed(t *testing.T) {
 		}
 	}
 }
+
+// TestConfigMinimalSaves guards the README's minimal config (endpoint+roles,
+// defaults omitted) — exactly what the UI sends when optional fields are blank.
+func TestConfigMinimalSaves(t *testing.T) {
+	ts, lastPut := newTestServer(t, "")
+	buf, _ := json.Marshal(validConfig())
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/config", strings.NewReader(string(buf)))
+	resp, _ := http.DefaultClient.Do(req)
+	if resp.StatusCode != 200 {
+		t.Fatalf("minimal config PUT status %d", resp.StatusCode)
+	}
+	if (*lastPut)["config"] == nil {
+		t.Fatal("no PUT recorded")
+	}
+}
+
+func TestLoopbackHostHeaderEnforced(t *testing.T) {
+	ts, _ := newTestServer(t, "")
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/config", nil)
+	req.Host = "evil.example.com" // DNS-rebound page's Host survives to the server
+	resp, _ := http.DefaultClient.Do(req)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("rebound Host: want 403, got %d", resp.StatusCode)
+	}
+	resp2, _ := http.Get(ts.URL + "/api/config")
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("loopback Host: want 200, got %d", resp2.StatusCode)
+	}
+}

@@ -22,10 +22,12 @@ OpenClaw) implement this document; breaking changes bump the version.
 Domain: ... | Complexity: 1-5 | Math: True/False | Code: True/False | Route: small model/big model | Justification: ...
 ```
 
-`Route` is required; all other fields are optional with zero-value defaults
-(`Domain` empty, `Complexity` 0, `Math`/`Code` false). Malformed optional
-fields are ignored — an unparseable `Complexity` never discards an
-otherwise-valid verdict.
+`Route` is required and must be exactly `small model` or `big model`; a
+missing or unrecognized `Route` makes the **whole verdict malformed** —
+adapters must fail open, never route on it. All other fields are optional
+with zero-value defaults (`Domain` empty, `Complexity` 0, `Math`/`Code`
+false). Malformed optional fields are ignored — an unparseable `Complexity`
+never discards an otherwise-valid verdict.
 
 ## 2. Decision ladder
 

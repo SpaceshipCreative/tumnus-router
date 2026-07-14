@@ -25,13 +25,13 @@
 <form id="cfg">
  <fieldset>
   <label>Classifier endpoint <input name="endpoint" required></label>
-  <label>Router model <input name="router_model"></label>
+  <label>Router model <input name="router_model" placeholder="SupraLabs/Supra-Router-51M (default)"></label>
   <div class="row">
-   <label>Timeout (ms) <input name="timeout_ms" type="number" min="1"></label>
-   <label>Max prompt chars <input name="max_prompt_chars" type="number" min="1"></label>
-   <label>Frontier threshold (1-5) <input name="frontier_complexity_threshold" type="number" min="1" max="5"></label>
+   <label>Timeout (ms) <input name="timeout_ms" type="number" min="1" placeholder="150"></label>
+   <label>Max prompt chars <input name="max_prompt_chars" type="number" min="1" placeholder="4000"></label>
+   <label>Frontier threshold (1-5) <input name="frontier_complexity_threshold" type="number" min="1" max="5" placeholder="5"></label>
   </div>
-  <label>Bypass header <input name="bypass_header"></label>
+  <label>Bypass header <input name="bypass_header" placeholder="x-tumnus-bypass (default)"></label>
  </fieldset>
  <fieldset id="roles"><legend>Roles</legend></fieldset>
  <button>Save</button><div id="status"></div>
@@ -67,11 +67,11 @@ function roleRows(cfg){
  }).join("");
 }
 function readForm(){
- const f=new FormData($("#cfg")),cfg={
-  endpoint:f.get("endpoint"),router_model:f.get("router_model"),
-  bypass_header:f.get("bypass_header"),
-  timeout_ms:+f.get("timeout_ms"),max_prompt_chars:+f.get("max_prompt_chars"),
-  frontier_complexity_threshold:+f.get("frontier_complexity_threshold"),roles:{}};
+ // Blank optional fields are OMITTED, not sent as ""/0 — the server applies
+ // defaults and rejects zero limits, so a minimal config must round-trip.
+ const f=new FormData($("#cfg")),cfg={endpoint:f.get("endpoint"),roles:{}};
+ for(const k of["router_model","bypass_header"]){const v=f.get(k);if(v)cfg[k]=v;}
+ for(const k of["timeout_ms","max_prompt_chars","frontier_complexity_threshold"]){const v=f.get(k);if(v!=="")cfg[k]=+v;}
  for(const div of document.querySelectorAll("#roles [data-role]")){
   const g=k=>div.querySelector(`[data-k="${k}"]`).value.trim();
   const fb=g("fb")?g("fb").split(",").map(s=>{const[p,...m]=s.trim().split("/");return{provider:p,model:m.join("/")}}):[];

@@ -32,13 +32,18 @@ func Init(rawConfig any) error {
 	// connections instead of paying TCP setup inside the timeout budget.
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxIdleConnsPerHost = 32
-	state.Store(&pluginState{
+	old := state.Swap(&pluginState{
 		cfg: parsed,
 		client: &http.Client{
 			Timeout:   time.Duration(parsed.TimeoutMs) * time.Millisecond,
 			Transport: transport,
 		},
 	})
+	if old != nil {
+		// Reloads would otherwise strand the replaced transport's idle pool.
+		// Safe for in-flight hooks on the old snapshot: only idle conns close.
+		old.client.CloseIdleConnections()
+	}
 	return nil
 }
 
@@ -124,6 +129,8 @@ func PostLLMHook(_ *schemas.BifrostContext, resp *schemas.BifrostResponse, bifro
 // Cleanup releases plugin state at shutdown (and between tests). In-flight
 // hooks that already snapshotted the state finish safely on the old pointer.
 func Cleanup() error {
-	state.Store(nil)
+	if old := state.Swap(nil); old != nil {
+		old.client.CloseIdleConnections()
+	}
 	return nil
 }

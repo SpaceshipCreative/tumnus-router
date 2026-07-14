@@ -121,8 +121,11 @@ func ParseAnalysis(s string) (*Analysis, error) {
 			a.Route = strings.ToLower(value)
 		}
 	}
-	if a.Route == "" {
-		return nil, fmt.Errorf("tumnus: no Route field in Analysis %q", s)
+	// The contract enumerates exactly two Route values; anything else makes
+	// the whole verdict malformed and the caller must fail open (a request
+	// must never be rerouted on output we don't understand).
+	if a.Route != "small model" && a.Route != "big model" {
+		return nil, fmt.Errorf("tumnus: missing or unknown Route %q in analysis %q", a.Route, s)
 	}
 	return a, nil
 }
@@ -135,7 +138,7 @@ func ChooseRole(a *Analysis, frontierThreshold int) string {
 		return RoleFrontier
 	case a.Code:
 		return RoleCodeCheap
-	case strings.Contains(a.Route, "big") || a.Math:
+	case a.Route == "big model" || a.Math:
 		return RoleLocalBig
 	default:
 		return RoleLocalSmall

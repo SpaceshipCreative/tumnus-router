@@ -4,11 +4,14 @@ on:
   pull_request:
   schedule:
     - cron: "0 6 * * 1"   # weekly canary vs latest core
+permissions:
+  contents: read
 jobs:
   test:
     strategy:
       matrix: { os: [ubuntu-latest, macos-latest] }
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

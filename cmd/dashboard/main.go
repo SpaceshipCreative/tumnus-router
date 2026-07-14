@@ -4,6 +4,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
 	"flag"
@@ -12,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	routerpkg "github.com/SpaceshipCreative/tumnus/router"
@@ -28,7 +30,20 @@ type server struct {
 
 func (s *server) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.token != "" && r.Header.Get("x-tumnus-token") != s.token {
+		if s.token == "" {
+			// Loopback mode has no token, so reject non-loopback Host headers:
+			// a DNS-rebound page must not become same-origin with the dashboard.
+			host := r.Host
+			if h, _, err := net.SplitHostPort(host); err == nil {
+				host = h
+			}
+			if host != "localhost" {
+				if ip := net.ParseIP(strings.Trim(host, "[]")); ip == nil || !ip.IsLoopback() {
+					http.Error(w, `{"error":"unexpected Host header"}`, http.StatusForbidden)
+					return
+				}
+			}
+		} else if subtle.ConstantTimeCompare([]byte(r.Header.Get("x-tumnus-token")), []byte(s.token)) != 1 {
 			http.Error(w, `{"error":"missing or bad x-tumnus-token"}`, http.StatusUnauthorized)
 			return
 		}

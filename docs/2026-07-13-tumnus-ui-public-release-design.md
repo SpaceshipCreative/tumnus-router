@@ -1,7 +1,7 @@
 # Tumnus: Rebrand, Embedded Config UI, and Public Release — Design Spec
 
 **Date:** 2026-07-13
-**Status:** Awaiting user review
+**Status:** Shipped in v0.1.0 (2026-07-13); this design doc is historical
 **Builds on:** `docs/2026-07-13-supra-router-plugin-design.md` (the shipped v1 plugin)
 
 ## Goal
