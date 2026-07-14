@@ -91,6 +91,7 @@ func TestConfigRoundTrip(t *testing.T) {
 	cfg["timeout_ms"] = 300
 	buf, _ := json.Marshal(cfg)
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/config", strings.NewReader(string(buf)))
+	req.Header.Set("Content-Type", "application/json")
 	resp2, _ := http.DefaultClient.Do(req)
 	if resp2.StatusCode != 200 {
 		t.Fatalf("PUT status %d", resp2.StatusCode)
@@ -107,6 +108,7 @@ func TestConfigRoundTrip(t *testing.T) {
 func TestConfigValidationRejected(t *testing.T) {
 	ts, _ := newTestServer(t, "")
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/config", strings.NewReader(`{"endpoint":""}`))
+	req.Header.Set("Content-Type", "application/json")
 	resp, _ := http.DefaultClient.Do(req)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("want 422, got %d", resp.StatusCode)
@@ -166,6 +168,7 @@ func TestSaveUsesFreshPluginMetadata(t *testing.T) {
 	resp.Body.Close()
 	buf, _ := json.Marshal(validConfig())
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/config", strings.NewReader(string(buf)))
+	req.Header.Set("Content-Type", "application/json")
 	resp2, _ := http.DefaultClient.Do(req)
 	if resp2.StatusCode != 200 {
 		t.Fatalf("PUT status %d", resp2.StatusCode)
@@ -201,6 +204,7 @@ func TestConfigMinimalSaves(t *testing.T) {
 	ts, lastPut := newTestServer(t, "")
 	buf, _ := json.Marshal(validConfig())
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/config", strings.NewReader(string(buf)))
+	req.Header.Set("Content-Type", "application/json")
 	resp, _ := http.DefaultClient.Do(req)
 	if resp.StatusCode != 200 {
 		t.Fatalf("minimal config PUT status %d", resp.StatusCode)
@@ -221,5 +225,35 @@ func TestLoopbackHostHeaderEnforced(t *testing.T) {
 	resp2, _ := http.Get(ts.URL + "/api/config")
 	if resp2.StatusCode != http.StatusOK {
 		t.Fatalf("loopback Host: want 200, got %d", resp2.StatusCode)
+	}
+}
+
+func TestCrossSiteRejectedTokenless(t *testing.T) {
+	ts, _ := newTestServer(t, "")
+	post := func(mutate func(*http.Request)) int {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/classify", strings.NewReader(`{"prompt":"hi"}`))
+		req.Header.Set("Content-Type", "application/json")
+		mutate(req)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if code := post(func(r *http.Request) { r.Header.Set("Origin", "https://evil.example.com") }); code != http.StatusForbidden {
+		t.Fatalf("cross-origin: want 403, got %d", code)
+	}
+	if code := post(func(r *http.Request) { r.Header.Set("Sec-Fetch-Site", "cross-site") }); code != http.StatusForbidden {
+		t.Fatalf("sec-fetch-site: want 403, got %d", code)
+	}
+	if code := post(func(r *http.Request) { r.Header.Set("Content-Type", "text/plain") }); code != http.StatusUnsupportedMediaType {
+		t.Fatalf("content-type: want 415, got %d", code)
+	}
+	if code := post(func(r *http.Request) {
+		r.Header.Set("Origin", "http://127.0.0.1:9090")
+		r.Header.Set("Sec-Fetch-Site", "same-origin")
+	}); code != http.StatusOK {
+		t.Fatalf("same-origin loopback: want 200, got %d", code)
 	}
 }

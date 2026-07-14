@@ -78,6 +78,11 @@ func ParseConfig(raw any) (*Config, error) {
 		if !ok || target.Provider == "" || target.Model == "" {
 			return nil, fmt.Errorf("tumnus: roles.%s with provider and model is required", role)
 		}
+		for i, fb := range target.Fallbacks {
+			if fb.Provider == "" || fb.Model == "" {
+				return nil, fmt.Errorf("tumnus: roles.%s.fallbacks[%d] requires provider and model", role, i)
+			}
+		}
 	}
 	return cfg, nil
 }
@@ -109,8 +114,9 @@ func ParseAnalysis(s string) (*Analysis, error) {
 			a.Domain = value
 		case "complexity":
 			// Optional field: model-output drift here shouldn't discard an
-			// otherwise-valid verdict. Unparseable -> stays 0 (lowest tier).
-			if n, err := strconv.Atoi(value); err == nil {
+			// otherwise-valid verdict. Unparseable or outside the contract's
+			// 1-5 range -> stays 0 (lowest tier).
+			if n, err := strconv.Atoi(value); err == nil && n >= 1 && n <= 5 {
 				a.Complexity = n
 			}
 		case "math":
@@ -125,7 +131,10 @@ func ParseAnalysis(s string) (*Analysis, error) {
 	// the whole verdict malformed and the caller must fail open (a request
 	// must never be rerouted on output we don't understand).
 	if a.Route != "small model" && a.Route != "big model" {
-		return nil, fmt.Errorf("tumnus: missing or unknown Route %q in analysis %q", a.Route, s)
+		// Bound the excerpts: this error is logged per request, and the raw
+		// model output can be up to the 1 MiB body cap.
+		return nil, fmt.Errorf("tumnus: missing or unknown Route %q in analysis %q",
+			TruncatePrompt(a.Route, 40), TruncatePrompt(s, 200))
 	}
 	return a, nil
 }

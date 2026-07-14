@@ -49,9 +49,15 @@ const $=q=>document.querySelector(q);
 // into innerHTML so a hostile provider/model/domain string can't run script.
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const hdrs=()=>{const t=sessionStorage.tumnusToken;return t?{"x-tumnus-token":t}:{ }};
-async function api(path,opts={}){
+async function api(path,opts={},retried){
  const r=await fetch(path,{...opts,headers:{"Content-Type":"application/json",...hdrs(),...(opts.headers||{})}});
- if(r.status===401){sessionStorage.tumnusToken=prompt("Dashboard token:")||"";return api(path,opts);}
+ if(r.status===401){
+  if(retried)throw new Error("authentication failed — bad token");
+  const t=prompt("Dashboard token:");
+  if(t==null)throw new Error("authentication cancelled");
+  sessionStorage.tumnusToken=t;
+  return api(path,opts,true);
+ }
  const j=await r.json().catch(()=>({}));
  if(!r.ok)throw new Error(j.error||r.status);
  return j;

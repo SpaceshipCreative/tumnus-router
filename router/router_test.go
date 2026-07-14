@@ -251,3 +251,32 @@ func TestParseAnalysisUnknownRouteFailsOpen(t *testing.T) {
 		}
 	}
 }
+
+func TestParseConfigRejectsMalformedFallbacks(t *testing.T) {
+	raw := validRawConfig()
+	raw["roles"].(map[string]any)["frontier"] = map[string]any{
+		"provider": "anthropic", "model": "claude-fable-5",
+		"fallbacks": []map[string]any{{"provider": "p", "model": ""}},
+	}
+	if _, err := ParseConfig(raw); err == nil {
+		t.Fatal("expected error for fallback with empty model")
+	}
+}
+
+func TestParseAnalysisComplexityRange(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want int
+	}{
+		{"Complexity: 999", 0}, {"Complexity: -3", 0}, {"Complexity: 0", 0},
+		{"Complexity: 6", 0}, {"Complexity: 5", 5}, {"Complexity: 1", 1},
+	} {
+		a, err := ParseAnalysis("Domain: x | " + tc.in + " | Route: small model")
+		if err != nil {
+			t.Fatalf("%s: %v", tc.in, err)
+		}
+		if a.Complexity != tc.want {
+			t.Errorf("%s: got %d, want %d", tc.in, a.Complexity, tc.want)
+		}
+	}
+}

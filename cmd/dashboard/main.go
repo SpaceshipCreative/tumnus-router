@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -43,12 +44,43 @@ func (s *server) auth(next http.HandlerFunc) http.HandlerFunc {
 					return
 				}
 			}
+			// Cross-site defense in depth: a hostile page can't spoof these
+			// browser-set headers to same-origin/loopback values.
+			if sfs := r.Header.Get("Sec-Fetch-Site"); sfs != "" && sfs != "same-origin" && sfs != "none" {
+				http.Error(w, `{"error":"cross-site request rejected"}`, http.StatusForbidden)
+				return
+			}
+			if o := r.Header.Get("Origin"); o != "" && !loopbackOrigin(o) {
+				http.Error(w, `{"error":"cross-origin request rejected"}`, http.StatusForbidden)
+				return
+			}
 		} else if subtle.ConstantTimeCompare([]byte(r.Header.Get("x-tumnus-token")), []byte(s.token)) != 1 {
 			http.Error(w, `{"error":"missing or bad x-tumnus-token"}`, http.StatusUnauthorized)
 			return
 		}
+		// API writes must be JSON: text/plain no-preflight cross-site POSTs
+		// (and accidental form posts) get rejected before any handler runs.
+		if r.Method != http.MethodGet {
+			if ct := r.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+				http.Error(w, `{"error":"Content-Type must be application/json"}`, http.StatusUnsupportedMediaType)
+				return
+			}
+		}
 		next(w, r)
 	}
+}
+
+func loopbackOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	h := u.Hostname()
+	if h == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
 }
 
 func jsonOut(w http.ResponseWriter, code int, v any) {

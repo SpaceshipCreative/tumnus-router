@@ -1,3 +1,6 @@
+> **Superseded** by the 2026-07-14 re-audit: the findings and 68/100 score below predate the fixes shipped in v0.1.1.
+
+
 # Tumnus Project Re-audit
 
 **Date:** 2026-07-13  
