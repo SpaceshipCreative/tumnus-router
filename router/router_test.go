@@ -263,6 +263,24 @@ func TestParseConfigRejectsMalformedFallbacks(t *testing.T) {
 	}
 }
 
+func TestExtractFirstUserText(t *testing.T) {
+	msgs := []schemas.ChatMessage{
+		{Role: schemas.ChatMessageRoleSystem, Content: &schemas.ChatMessageContent{ContentStr: strPtr("be nice")}},
+		userMsg(schemas.ChatMessageContent{ContentStr: strPtr("first question")}),
+		{Role: schemas.ChatMessageRoleAssistant, Content: &schemas.ChatMessageContent{ContentStr: strPtr("answer")}},
+		userMsg(schemas.ChatMessageContent{ContentStr: strPtr("second question")}),
+	}
+	if got := ExtractFirstUserText(msgs, 4000); got != "first question" {
+		t.Fatalf("got %q", got)
+	}
+	if got := ExtractFirstUserText(msgs, 5); got != "first" {
+		t.Fatalf("truncation: got %q", got)
+	}
+	if got := ExtractFirstUserText(nil, 4000); got != "" {
+		t.Fatalf("empty: got %q", got)
+	}
+}
+
 func TestParseConfigTrajectoryDefaults(t *testing.T) {
 	cfg, err := ParseConfig(validRawConfig())
 	if err != nil {

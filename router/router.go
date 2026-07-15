@@ -249,29 +249,43 @@ func Classify(ctx context.Context, client *http.Client, cfg *Config, prompt stri
 // to maxChars. Returns "" when there is nothing to Classify.
 func ExtractLastUserText(msgs []schemas.ChatMessage, maxChars int) string {
 	for i := len(msgs) - 1; i >= 0; i-- {
-		msg := msgs[i]
-		if msg.Role != schemas.ChatMessageRoleUser || msg.Content == nil {
+		if msgs[i].Role != schemas.ChatMessageRoleUser || msgs[i].Content == nil {
 			continue
 		}
-		var text string
-		if msg.Content.ContentStr != nil {
-			text = *msg.Content.ContentStr
-		} else {
-			var parts []string
-			for _, block := range msg.Content.ContentBlocks {
-				if block.Type == schemas.ChatContentBlockTypeText && block.Text != nil {
-					parts = append(parts, *block.Text)
-				}
-			}
-			text = strings.Join(parts, "\n")
-		}
-		text = strings.TrimSpace(text)
-		if text == "" {
-			return ""
-		}
-		return TruncatePrompt(text, maxChars)
+		return TruncatePrompt(userText(msgs[i]), maxChars)
 	}
 	return ""
+}
+
+// ExtractFirstUserText returns the text of the earliest non-empty user
+// message, same joining/truncation rules as ExtractLastUserText. It is the
+// conversation's stable identity: every later turn of the same conversation
+// still starts with the same first message.
+func ExtractFirstUserText(msgs []schemas.ChatMessage, maxChars int) string {
+	for i := range msgs {
+		if text := userText(msgs[i]); text != "" {
+			return TruncatePrompt(text, maxChars)
+		}
+	}
+	return ""
+}
+
+// userText joins a user message's text (string content or text blocks) with
+// newlines, trimmed. "" for non-user messages or messages without text.
+func userText(msg schemas.ChatMessage) string {
+	if msg.Role != schemas.ChatMessageRoleUser || msg.Content == nil {
+		return ""
+	}
+	if msg.Content.ContentStr != nil {
+		return strings.TrimSpace(*msg.Content.ContentStr)
+	}
+	var parts []string
+	for _, block := range msg.Content.ContentBlocks {
+		if block.Type == schemas.ChatContentBlockTypeText && block.Text != nil {
+			parts = append(parts, *block.Text)
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n"))
 }
 
 // TruncatePrompt returns s truncated to at most maxChars runes, never
