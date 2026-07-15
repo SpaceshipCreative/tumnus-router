@@ -52,6 +52,8 @@ type Config struct {
 	TrajectoryWindow            int                   `json:"trajectory_window"`   // 0 disables; 3-32 tracks per-conversation complexity trend
 	SessionHeader               string                `json:"session_header"`      // client-supplied conversation id header
 	SessionTTLSec               int                   `json:"session_ttl_seconds"` // idle conversations are forgotten after this
+	CascadeEnabled              bool                  `json:"cascade_enabled"`     // gate non-streaming responses; escalate unusable ones to the fallback chain
+	CascadeMinChars             int                   `json:"cascade_min_chars"`   // minimum assistant text to accept (tool-call responses always pass)
 }
 
 // ParseConfig converts the raw config (map[string]any from config.json) into a
@@ -70,6 +72,7 @@ func ParseConfig(raw any) (*Config, error) {
 		FrontierComplexityThreshold: 5,
 		SessionHeader:               "x-tumnus-session",
 		SessionTTLSec:               3600,
+		CascadeMinChars:             1,
 	}
 	if err := json.Unmarshal(buf, cfg); err != nil {
 		return nil, fmt.Errorf("tumnus: invalid config: %w", err)
@@ -91,6 +94,9 @@ func ParseConfig(raw any) (*Config, error) {
 	}
 	if cfg.SessionTTLSec <= 0 {
 		return nil, fmt.Errorf("tumnus: session_ttl_seconds must be positive, got %d", cfg.SessionTTLSec)
+	}
+	if cfg.CascadeMinChars < 1 {
+		return nil, fmt.Errorf("tumnus: cascade_min_chars must be >= 1, got %d", cfg.CascadeMinChars)
 	}
 	for _, role := range AllRoles {
 		target, ok := cfg.Roles[role]

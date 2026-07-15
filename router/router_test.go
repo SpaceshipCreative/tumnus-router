@@ -347,6 +347,21 @@ func TestPickInstance(t *testing.T) {
 	}
 }
 
+func TestParseConfigCascade(t *testing.T) {
+	cfg, err := ParseConfig(validRawConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CascadeEnabled || cfg.CascadeMinChars != 1 {
+		t.Fatalf("cascade defaults wrong: enabled=%t min=%d", cfg.CascadeEnabled, cfg.CascadeMinChars)
+	}
+	raw := validRawConfig()
+	raw["cascade_min_chars"] = 0
+	if _, err := ParseConfig(raw); err == nil {
+		t.Fatal("expected error for cascade_min_chars < 1")
+	}
+}
+
 func TestParseConfigTrajectoryDefaults(t *testing.T) {
 	cfg, err := ParseConfig(validRawConfig())
 	if err != nil {
