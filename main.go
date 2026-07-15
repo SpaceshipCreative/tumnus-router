@@ -22,6 +22,13 @@ type pluginState struct {
 
 var state atomic.Pointer[pluginState]
 
+// cascadeArmedKey marks a request Tumnus routed, non-streaming, with
+// fallbacks available — the only requests the cascade may escalate.
+// escalatedKey marks that the cascade already fired once for this request;
+// the fallback attempt's post-hook must pass its response through unjudged.
+type cascadeArmedKey struct{}
+type escalatedKey struct{}
+
 // Init parses and validates the plugin config. Invalid config fails the load.
 func Init(rawConfig any) error {
 	parsed, err := routerpkg.ParseConfig(rawConfig)
@@ -118,14 +125,20 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 		req.ChatRequest.Fallbacks = routerpkg.DefaultFallbacks(role, cfg.Roles)
 	}
 
+	// Arm the cascade only for non-streaming requests: streamed chunks are
+	// already on the wire before a post-hoc gate could judge them.
+	if cfg.CascadeEnabled && req.RequestType == schemas.ChatCompletionRequest && len(req.ChatRequest.Fallbacks) > 0 {
+		ctx.SetValue(cascadeArmedKey{}, true)
+	}
+
 	ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelInfo,
 		fmt.Sprintf("tumnus: domain=%q complexity=%d code=%t math=%t route=%q threshold=%d -> role=%s target=%s/%s (classified in %s)",
 			a.Domain, a.Complexity, a.Code, a.Math, a.Route, threshold, role, provider, model, time.Since(start).Round(time.Millisecond)))
 	return nil
 }
 
-// The hooks below are required exports for dynamic plugins; this plugin does
-// not use them.
+// The hooks below (except PostLLMHook) are required exports for dynamic
+// plugins; this plugin does not use them.
 
 func HTTPTransportPreHook(_ *schemas.BifrostContext, _ *schemas.HTTPRequest) (*schemas.HTTPResponse, error) {
 	return nil, nil
@@ -143,8 +156,33 @@ func PreLLMHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) (*schema
 	return req, nil, nil
 }
 
-func PostLLMHook(_ *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
-	return resp, bifrostErr, nil
+// PostLLMHook gates routed, non-streaming responses. A response that is
+// unusable on its face is converted into a BifrostError with fallbacks
+// allowed (nil AllowFallbacks defaults to true), so Bifrost core retries the
+// fallback chain the pre-hook set. Everything else passes through untouched.
+func PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, bifrostErr *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
+	s := state.Load()
+	if s == nil || !s.cfg.CascadeEnabled || ctx == nil || bifrostErr != nil || resp == nil || resp.ChatResponse == nil {
+		return resp, bifrostErr, nil
+	}
+	if armed, _ := ctx.Value(cascadeArmedKey{}).(bool); !armed {
+		return resp, bifrostErr, nil
+	}
+	// One escalation per request: fallback-attempt responses pass through
+	// even if they would fail the gate again — re-failing after the last
+	// rung would surface an error where the client could have had a response.
+	if esc, _ := ctx.Value(escalatedKey{}).(bool); esc {
+		return resp, bifrostErr, nil
+	}
+	if routerpkg.AcceptResponse(resp.ChatResponse, s.cfg.CascadeMinChars) {
+		return resp, bifrostErr, nil
+	}
+	ctx.SetValue(escalatedKey{}, true)
+	ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelWarn,
+		"tumnus: response failed cascade quality gate, escalating to fallback chain")
+	return nil, &schemas.BifrostError{
+		Error: &schemas.ErrorField{Message: "tumnus: low-quality response, escalating to fallback"},
+	}, nil
 }
 
 // Cleanup releases plugin state at shutdown (and between tests). In-flight

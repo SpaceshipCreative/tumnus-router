@@ -238,6 +238,112 @@ func TestPreRequestHookTrajectoryDisabledByDefault(t *testing.T) {
 	}
 }
 
+func cascadeConfig() map[string]any {
+	raw := validRawConfig()
+	raw["cascade_enabled"] = true
+	return raw
+}
+
+func emptyChatResponse() *schemas.BifrostResponse {
+	empty := ""
+	return &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{
+		Choices: []schemas.BifrostResponseChoice{{
+			ChatNonStreamResponseChoice: &schemas.ChatNonStreamResponseChoice{
+				Message: &schemas.ChatMessage{
+					Role:    schemas.ChatMessageRoleAssistant,
+					Content: &schemas.ChatMessageContent{ContentStr: &empty},
+				},
+			},
+		}},
+	}}
+}
+
+func goodChatResponse() *schemas.BifrostResponse {
+	text := "a useful answer"
+	resp := emptyChatResponse()
+	resp.ChatResponse.Choices[0].ChatNonStreamResponseChoice.Message.Content.ContentStr = &text
+	return resp
+}
+
+// routeAndRespond runs the pre-hook (arming the cascade on ctx) then feeds
+// the given response to the post-hook, returning the post-hook's error.
+func routeAndRespond(t *testing.T, ctx *schemas.BifrostContext, resp *schemas.BifrostResponse) *schemas.BifrostError {
+	t.Helper()
+	req := chatRequest("hello")
+	if err := PreRequestHook(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	if len(req.ChatRequest.Fallbacks) == 0 {
+		t.Fatal("test premise broken: routed request must have fallbacks")
+	}
+	_, bifrostErr, err := PostLLMHook(ctx, resp, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bifrostErr
+}
+
+func TestCascadeEscalatesEmptyResponse(t *testing.T) {
+	srv := fakeSupra(t, "Domain: chat | Complexity: 1 | Math: False | Code: False | Route: small model", 0)
+	t.Cleanup(srv.Close)
+	raw := cascadeConfig()
+	raw["endpoint"] = srv.URL
+	if err := Init(raw); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = Cleanup() })
+
+	ctx := newCtx()
+	if bifrostErr := routeAndRespond(t, ctx, emptyChatResponse()); bifrostErr == nil {
+		t.Fatal("empty response must escalate (return BifrostError)")
+	} else if bifrostErr.AllowFallbacks != nil && !*bifrostErr.AllowFallbacks {
+		t.Fatal("escalation error must allow fallbacks")
+	}
+	// The fallback attempt's response passes through even if still empty:
+	// one escalation per request.
+	if _, bifrostErr, _ := PostLLMHook(ctx, emptyChatResponse(), nil); bifrostErr != nil {
+		t.Fatal("second post-hook on same request must pass through (escalation cap)")
+	}
+}
+
+func TestCascadeAcceptsGoodResponse(t *testing.T) {
+	srv := fakeSupra(t, "Domain: chat | Complexity: 1 | Math: False | Code: False | Route: small model", 0)
+	t.Cleanup(srv.Close)
+	raw := cascadeConfig()
+	raw["endpoint"] = srv.URL
+	if err := Init(raw); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = Cleanup() })
+
+	if bifrostErr := routeAndRespond(t, newCtx(), goodChatResponse()); bifrostErr != nil {
+		t.Fatalf("good response must pass through, got %+v", bifrostErr)
+	}
+}
+
+func TestCascadeIgnoresUnroutedAndDisabled(t *testing.T) {
+	// Disabled (default config): post-hook must never touch anything.
+	setupPlugin(t, "Domain: chat | Complexity: 1 | Math: False | Code: False | Route: small model", 0)
+	if _, bifrostErr, _ := PostLLMHook(newCtx(), emptyChatResponse(), nil); bifrostErr != nil {
+		t.Fatal("cascade disabled: must pass through")
+	}
+	_ = Cleanup()
+
+	// Enabled but request never went through the pre-hook (e.g. bypassed):
+	// no armed flag on ctx, must pass through.
+	srv := fakeSupra(t, "Domain: chat | Complexity: 1 | Math: False | Code: False | Route: small model", 0)
+	defer srv.Close()
+	raw := cascadeConfig()
+	raw["endpoint"] = srv.URL
+	if err := Init(raw); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = Cleanup() }()
+	if _, bifrostErr, _ := PostLLMHook(newCtx(), emptyChatResponse(), nil); bifrostErr != nil {
+		t.Fatal("unrouted request: must pass through")
+	}
+}
+
 func TestRebrand(t *testing.T) {
 	if GetName() != "tumnus" {
 		t.Fatalf("GetName() = %q, want tumnus", GetName())
