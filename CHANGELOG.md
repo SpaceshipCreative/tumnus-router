@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+Three routing upgrades, all default-off — a config that works today routes
+byte-identically after upgrading:
+
+- Conversation complexity trajectory (`trajectory_window`, `session_header`,
+  `session_ttl_seconds`): tracks a sliding window of complexity scores per
+  conversation and reaches the frontier one rung earlier when a conversation
+  is escalating.
+- Instance affinity (per-role `instances` array): pins each conversation to
+  one deployment of a role's model by hashing its first user message, keeping
+  that deployment's KV cache warm.
+- Quality cascade (`cascade_enabled`, `cascade_min_chars`): gates routed
+  non-streaming responses after the fact; face-value-unusable responses are
+  escalated once through the fallback chain via Bifrost's own retry
+  machinery.
+
 ## v0.1.2
 
 - Validate fallback entries in ParseConfig (empty provider/model rejected).

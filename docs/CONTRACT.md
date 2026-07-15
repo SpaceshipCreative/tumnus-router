@@ -75,3 +75,15 @@ hashing the conversation's first user message (first 200 chars), so every
 turn of one conversation lands on the same deployment and reuses its KV
 cache. Requests with no user text use the primary. Fallbacks remain
 role-level: instance selection never alters the decision ladder.
+
+## 6. Quality cascade (optional)
+
+When `cascade_enabled` is true, adapters gate routed **non-streaming** chat
+responses after the fact. A response is unusable on its face when it has no
+choices, or an assistant message with neither tool calls nor at least
+`cascade_min_chars` runes of text (default 1). Unusable responses are
+converted into a retryable error so the gateway walks the request's fallback
+chain (section 2). At most one escalation per request: the fallback
+attempt's response is returned as-is. Streaming requests, bypassed requests,
+and requests that failed classification are never gated. Escalations are
+logged at warn level.

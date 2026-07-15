@@ -94,7 +94,12 @@ message), `session_ttl_seconds` (3600, idle conversations are forgotten),
 per-role `instances` array (extra deployments of the same model; each
 conversation consistently lands on one of them by hashing its first user
 message, keeping that deployment's KV cache warm — fallbacks stay
-role-level).
+role-level), `cascade_enabled` (false; gates non-streaming responses after
+the fact and escalates face-value-unusable ones — empty or shorter than
+`cascade_min_chars` runes, default 1 — through the fallback chain, at most
+once per request). Cascade trade-off: if every fallback also fails, the
+client receives the escalation error instead of the original (empty)
+response.
 
 Good to know:
 
