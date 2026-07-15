@@ -54,3 +54,15 @@ assignments; an explicit per-role `fallbacks` array overrides the derivation.
   that request.
 - Every routing decision is **logged** with domain, complexity, code/math
   flags, chosen role, target provider/model, and classification latency.
+
+## 4. Conversation trajectory (optional)
+
+When `trajectory_window` is 3-32, adapters track a sliding window of
+complexity scores per conversation. Conversation identity is the
+`session_header` value (default `x-tumnus-session`) when present, otherwise a
+hash of the first user message. When a full window of >= 3 scores shows a
+first-to-last complexity increase of >= 2, the frontier threshold is lowered
+by one for that request (floor 1). Complexity 0 (classifier omitted the
+field) is never recorded. Idle conversations are forgotten after
+`session_ttl_seconds` (default 3600). `trajectory_window: 0` (default)
+disables the feature entirely.

@@ -86,7 +86,11 @@ any CEL routing rule you add later still overrides it (manual escape hatch):
 Optional config keys (defaults): `router_model` (`SupraLabs/Supra-Router-51M`),
 `timeout_ms` (150), `max_prompt_chars` (4000), `bypass_header` (`x-tumnus-bypass`),
 `frontier_complexity_threshold` (5), per-role `fallbacks` array (derived from
-the ladder when omitted).
+the ladder when omitted), `trajectory_window` (0 = off; 3-32 tracks
+per-conversation complexity trends and reaches the frontier one rung earlier
+when a conversation escalates), `session_header` (`x-tumnus-session`, names
+the conversation for trend tracking; falls back to hashing the first user
+message), `session_ttl_seconds` (3600, idle conversations are forgotten).
 
 Good to know:
 
