@@ -25,11 +25,18 @@ const (
 
 var AllRoles = []string{RoleLocalSmall, RoleLocalBig, RoleCodeCheap, RoleFrontier}
 
+// Instance is one of several deployments serving a role's model.
+type Instance struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+}
+
 // RoleTarget is the provider/model a routing role resolves to.
 type RoleTarget struct {
 	Provider  string             `json:"provider"`
 	Model     string             `json:"model"`
 	Fallbacks []schemas.Fallback `json:"fallbacks,omitempty"` // optional; derived from ladder when empty
+	Instances []Instance         `json:"instances,omitempty"` // optional peer deployments; selected by conversation affinity
 }
 
 // Config is the plugin configuration (config.json "config" block).
@@ -92,6 +99,11 @@ func ParseConfig(raw any) (*Config, error) {
 		for i, fb := range target.Fallbacks {
 			if fb.Provider == "" || fb.Model == "" {
 				return nil, fmt.Errorf("tumnus: roles.%s.fallbacks[%d] requires provider and model", role, i)
+			}
+		}
+		for i, inst := range target.Instances {
+			if inst.Provider == "" || inst.Model == "" {
+				return nil, fmt.Errorf("tumnus: roles.%s.instances[%d] requires provider and model", role, i)
 			}
 		}
 	}

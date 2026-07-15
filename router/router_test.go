@@ -281,6 +281,32 @@ func TestExtractFirstUserText(t *testing.T) {
 	}
 }
 
+func TestParseConfigInstances(t *testing.T) {
+	raw := validRawConfig()
+	raw["roles"].(map[string]any)["local_big"] = map[string]any{
+		"provider": "vllm-blackwell", "model": "deepseek-v4-flash",
+		"instances": []map[string]any{{"provider": "vllm-sparks", "model": "deepseek-v4-flash"}},
+	}
+	cfg, err := ParseConfig(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Roles["local_big"].Instances) != 1 || cfg.Roles["local_big"].Instances[0].Provider != "vllm-sparks" {
+		t.Fatalf("instances not parsed: %+v", cfg.Roles["local_big"])
+	}
+}
+
+func TestParseConfigRejectsMalformedInstances(t *testing.T) {
+	raw := validRawConfig()
+	raw["roles"].(map[string]any)["local_big"] = map[string]any{
+		"provider": "vllm-blackwell", "model": "deepseek-v4-flash",
+		"instances": []map[string]any{{"provider": "", "model": "x"}},
+	}
+	if _, err := ParseConfig(raw); err == nil {
+		t.Fatal("expected error for instance with empty provider")
+	}
+}
+
 func TestParseConfigTrajectoryDefaults(t *testing.T) {
 	cfg, err := ParseConfig(validRawConfig())
 	if err != nil {
