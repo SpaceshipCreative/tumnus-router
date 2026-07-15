@@ -130,6 +130,8 @@ func TestConcurrentInitCleanupHook(t *testing.T) {
 	defer srv.Close()
 	raw := validRawConfig()
 	raw["endpoint"] = srv.URL
+	// Trajectory on so the churn also races concurrent Sessions.Observe calls.
+	raw["trajectory_window"] = 5
 
 	done := make(chan struct{})
 	go func() {
