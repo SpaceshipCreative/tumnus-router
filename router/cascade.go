@@ -16,6 +16,9 @@ func AcceptResponse(resp *schemas.BifrostChatResponse, minChars int) bool {
 	if resp == nil || len(resp.Choices) == 0 {
 		return false
 	}
+	// Any passing choice accepts the whole response: chat completions are n=1
+	// in practice, and a face-value gate shouldn't escalate an n>1 response
+	// that contains at least one usable answer.
 	for _, choice := range resp.Choices {
 		if choice.ChatNonStreamResponseChoice == nil || choice.ChatNonStreamResponseChoice.Message == nil {
 			continue
