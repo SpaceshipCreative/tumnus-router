@@ -15,8 +15,9 @@ import (
 // single atomic load. Bifrost may call Cleanup/Init (unload/reload) while
 // requests are in flight; hooks must never observe a half-torn-down state.
 type pluginState struct {
-	cfg    *routerpkg.Config
-	client *http.Client
+	cfg      *routerpkg.Config
+	client   *http.Client
+	sessions *routerpkg.Sessions // nil when trajectory_window is 0
 }
 
 var state atomic.Pointer[pluginState]
@@ -32,12 +33,17 @@ func Init(rawConfig any) error {
 	// connections instead of paying TCP setup inside the timeout budget.
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxIdleConnsPerHost = 32
+	var sessions *routerpkg.Sessions
+	if parsed.TrajectoryWindow >= 3 {
+		sessions = routerpkg.NewSessions(parsed.TrajectoryWindow, time.Duration(parsed.SessionTTLSec)*time.Second)
+	}
 	old := state.Swap(&pluginState{
 		cfg: parsed,
 		client: &http.Client{
 			Timeout:   time.Duration(parsed.TimeoutMs) * time.Millisecond,
 			Transport: transport,
 		},
+		sessions: sessions,
 	})
 	if old != nil {
 		// Reloads would otherwise strand the replaced transport's idle pool.
@@ -65,7 +71,8 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 	if req.RequestType != schemas.ChatCompletionRequest && req.RequestType != schemas.ChatCompletionStreamRequest {
 		return nil
 	}
-	if headers, _ := ctx.Value(schemas.BifrostContextKeyRequestHeaders).(map[string]string); headers[cfg.BypassHeader] == "true" {
+	headers, _ := ctx.Value(schemas.BifrostContextKeyRequestHeaders).(map[string]string)
+	if headers[cfg.BypassHeader] == "true" {
 		ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelInfo, "tumnus: bypass header set, skipping")
 		return nil
 	}
@@ -87,7 +94,17 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 		return nil
 	}
 
-	role := routerpkg.ChooseRole(a, cfg.FrontierComplexityThreshold)
+	threshold := cfg.FrontierComplexityThreshold
+	// Complexity 0 means the classifier omitted the field; never feed it to
+	// the trend or a later real score would fake an escalation.
+	if s.sessions != nil && a.Complexity >= 1 {
+		if key := routerpkg.SessionKey(headers, cfg.SessionHeader, req.ChatRequest.Input); key != "" {
+			if s.sessions.Observe(key, a.Complexity) && threshold > 1 {
+				threshold-- // escalating conversation: reach frontier one rung earlier
+			}
+		}
+	}
+	role := routerpkg.ChooseRole(a, threshold)
 	target := cfg.Roles[role]
 	req.ChatRequest.Provider = schemas.ModelProvider(target.Provider)
 	req.ChatRequest.Model = target.Model
@@ -98,8 +115,8 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 	}
 
 	ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelInfo,
-		fmt.Sprintf("tumnus: domain=%q complexity=%d code=%t math=%t route=%q -> role=%s target=%s/%s (classified in %s)",
-			a.Domain, a.Complexity, a.Code, a.Math, a.Route, role, target.Provider, target.Model, time.Since(start).Round(time.Millisecond)))
+		fmt.Sprintf("tumnus: domain=%q complexity=%d code=%t math=%t route=%q threshold=%d -> role=%s target=%s/%s (classified in %s)",
+			a.Domain, a.Complexity, a.Code, a.Math, a.Route, threshold, role, target.Provider, target.Model, time.Since(start).Round(time.Millisecond)))
 	return nil
 }
 

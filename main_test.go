@@ -149,6 +149,61 @@ func TestConcurrentInitCleanupHook(t *testing.T) {
 	_ = Cleanup()
 }
 
+func TestPreRequestHookTrajectoryEscalates(t *testing.T) {
+	// Three turns, complexity 2 -> 3 -> 4, all Code. Threshold 5 means the
+	// final turn would normally stay on code_cheap; the upward trend lowers
+	// the effective threshold to 4 and routes it to frontier.
+	turns := []string{
+		"Domain: software | Complexity: 2 | Math: False | Code: True | Route: small model",
+		"Domain: software | Complexity: 3 | Math: False | Code: True | Route: big model",
+		"Domain: software | Complexity: 4 | Math: False | Code: True | Route: big model",
+	}
+	i := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"text":"` + turns[i] + `"}]}`))
+		i++
+	}))
+	t.Cleanup(srv.Close)
+	raw := validRawConfig()
+	raw["endpoint"] = srv.URL
+	raw["trajectory_window"] = 5
+	if err := Init(raw); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = Cleanup() })
+
+	ctx := newCtx()
+	ctx.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{"x-tumnus-session": "conv-1"})
+	for turn := 0; turn < 3; turn++ {
+		req := chatRequest("write the next part of the scraper")
+		if err := PreRequestHook(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+		if turn < 2 && string(req.ChatRequest.Provider) == "anthropic" {
+			t.Fatalf("turn %d escalated too early", turn)
+		}
+		if turn == 2 && string(req.ChatRequest.Provider) != "anthropic" {
+			t.Fatalf("turn 2 should escalate to frontier, got %s/%s", req.ChatRequest.Provider, req.ChatRequest.Model)
+		}
+	}
+}
+
+func TestPreRequestHookTrajectoryDisabledByDefault(t *testing.T) {
+	setupPlugin(t, "Domain: software | Complexity: 4 | Math: False | Code: True | Route: big model", 0)
+	ctx := newCtx()
+	ctx.SetValue(schemas.BifrostContextKeyRequestHeaders, map[string]string{"x-tumnus-session": "conv-2"})
+	for turn := 0; turn < 4; turn++ {
+		req := chatRequest("more code")
+		if err := PreRequestHook(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+		if string(req.ChatRequest.Provider) != "ollama-cloud" {
+			t.Fatalf("trajectory off: turn %d must stay on code_cheap, got %s", turn, req.ChatRequest.Provider)
+		}
+	}
+}
+
 func TestRebrand(t *testing.T) {
 	if GetName() != "tumnus" {
 		t.Fatalf("GetName() = %q, want tumnus", GetName())
