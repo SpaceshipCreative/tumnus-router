@@ -95,6 +95,34 @@ Good to know:
 - Any classification failure fails open: the request proceeds unchanged.
 - Decisions appear in Bifrost's Routing Decision Logs (`routing-rule` engine).
 
+## Multi-turn agents: keep your local caches warm
+
+Tumnus routes every request on its own merits, so a long agentic
+conversation can legitimately change models mid-task — one hard turn goes to
+the frontier, the next comes home to `local_big`. The catch is the return
+trip: your local model only skips re-reading the whole conversation if it
+still holds the KV cache for that prefix, and GPU memory evicts fast. On an
+agent context that has grown to tens of thousands of tokens, every cold
+return is a full prefill — slow, and for no good reason.
+
+If your `local_small` / `local_big` roles serve agentic or long multi-turn
+traffic, run a persistent KV-cache layer next to them:
+
+- **vLLM prefix caching** — start with `--enable-prefix-caching`; free, and
+  helps as long as the prefix survives in GPU memory.
+- **[LMCache](https://docs.lmcache.ai/)** — offloads KV caches to CPU RAM or
+  SSD and reloads them on demand, so a conversation's prefix survives
+  eviction, model switches, and server restarts. The single best upgrade for
+  agentic traffic on local models.
+- **[Mooncake Store](https://github.com/kvcache-ai/Mooncake)** — a
+  cluster-wide KV store (usable as an LMCache backend) if you run multiple
+  replicas or nodes.
+
+Two honest caveats: KV caches are per-model, so nothing makes the *first*
+hop to a different model free — caching makes coming *back* cheap. And this
+only applies to models you serve yourself; hosted providers
+(`code_cheap`, `frontier`) manage their own prompt caching.
+
 ## Classifier support
 
 Any classifier served over an OpenAI-compatible completions API that emits the
