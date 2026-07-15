@@ -41,6 +41,9 @@ type Config struct {
 	BypassHeader                string                `json:"bypass_header"`
 	FrontierComplexityThreshold int                   `json:"frontier_complexity_threshold"`
 	Roles                       map[string]RoleTarget `json:"roles"`
+	TrajectoryWindow            int                   `json:"trajectory_window"`   // 0 disables; 3-32 tracks per-conversation complexity trend
+	SessionHeader               string                `json:"session_header"`      // client-supplied conversation id header
+	SessionTTLSec               int                   `json:"session_ttl_seconds"` // idle conversations are forgotten after this
 }
 
 // ParseConfig converts the raw config (map[string]any from config.json) into a
@@ -57,6 +60,8 @@ func ParseConfig(raw any) (*Config, error) {
 		MaxPromptChars:              4000,
 		BypassHeader:                "x-tumnus-bypass",
 		FrontierComplexityThreshold: 5,
+		SessionHeader:               "x-tumnus-session",
+		SessionTTLSec:               3600,
 	}
 	if err := json.Unmarshal(buf, cfg); err != nil {
 		return nil, fmt.Errorf("tumnus: invalid config: %w", err)
@@ -72,6 +77,12 @@ func ParseConfig(raw any) (*Config, error) {
 	}
 	if cfg.MaxPromptChars <= 0 {
 		return nil, fmt.Errorf("tumnus: max_prompt_chars must be positive, got %d", cfg.MaxPromptChars)
+	}
+	if cfg.TrajectoryWindow != 0 && (cfg.TrajectoryWindow < 3 || cfg.TrajectoryWindow > 32) {
+		return nil, fmt.Errorf("tumnus: trajectory_window must be 0 (disabled) or 3-32, got %d", cfg.TrajectoryWindow)
+	}
+	if cfg.SessionTTLSec <= 0 {
+		return nil, fmt.Errorf("tumnus: session_ttl_seconds must be positive, got %d", cfg.SessionTTLSec)
 	}
 	for _, role := range AllRoles {
 		target, ok := cfg.Roles[role]

@@ -263,6 +263,36 @@ func TestParseConfigRejectsMalformedFallbacks(t *testing.T) {
 	}
 }
 
+func TestParseConfigTrajectoryDefaults(t *testing.T) {
+	cfg, err := ParseConfig(validRawConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.TrajectoryWindow != 0 || cfg.SessionHeader != "x-tumnus-session" || cfg.SessionTTLSec != 3600 {
+		t.Fatalf("trajectory defaults not applied: %+v", cfg)
+	}
+}
+
+func TestParseConfigTrajectoryValidation(t *testing.T) {
+	for name, mutate := range map[string]func(m map[string]any){
+		"window too small": func(m map[string]any) { m["trajectory_window"] = 2 },
+		"window too big":   func(m map[string]any) { m["trajectory_window"] = 33 },
+		"negative window":  func(m map[string]any) { m["trajectory_window"] = -1 },
+		"zero ttl":         func(m map[string]any) { m["session_ttl_seconds"] = 0 },
+	} {
+		raw := validRawConfig()
+		mutate(raw)
+		if _, err := ParseConfig(raw); err == nil {
+			t.Errorf("%s: expected error, got nil", name)
+		}
+	}
+	raw := validRawConfig()
+	raw["trajectory_window"] = 5
+	if _, err := ParseConfig(raw); err != nil {
+		t.Errorf("window 5 should be valid: %v", err)
+	}
+}
+
 func TestParseAnalysisComplexityRange(t *testing.T) {
 	for _, tc := range []struct {
 		in   string
