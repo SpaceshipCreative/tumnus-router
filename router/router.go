@@ -280,6 +280,9 @@ func Classify(ctx context.Context, client *http.Client, cfg *Config, prompt stri
 // to maxChars. Returns "" when there is nothing to Classify.
 func ExtractLastUserText(msgs []schemas.ChatMessage, maxChars int) string {
 	for i := len(msgs) - 1; i >= 0; i-- {
+		// Deliberately re-checks role/content instead of testing userText() != "":
+		// this function stops at the last user message with non-nil Content even
+		// when its text is blank (returning ""), it never skips past it.
 		if msgs[i].Role != schemas.ChatMessageRoleUser || msgs[i].Content == nil {
 			continue
 		}

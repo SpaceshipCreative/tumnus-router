@@ -209,6 +209,15 @@ func TestExtractLastUserTextTruncationAndEmpty(t *testing.T) {
 	if got := ExtractLastUserText(nil, 4000); got != "" {
 		t.Fatalf("empty: got %q", got)
 	}
+	// Pins the stop-don't-skip rule: a blank-text last user message returns ""
+	// rather than falling back to an earlier user message.
+	msgs := []schemas.ChatMessage{
+		userMsg(schemas.ChatMessageContent{ContentStr: strPtr("earlier question")}),
+		userMsg(schemas.ChatMessageContent{ContentStr: strPtr("   ")}),
+	}
+	if got := ExtractLastUserText(msgs, 4000); got != "" {
+		t.Fatalf("blank last user message must stop the search: got %q", got)
+	}
 }
 
 func TestParseConfigNonPositiveLimits(t *testing.T) {
