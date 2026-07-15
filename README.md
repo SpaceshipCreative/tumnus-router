@@ -90,7 +90,11 @@ the ladder when omitted), `trajectory_window` (0 = off; 3-32 tracks
 per-conversation complexity trends and reaches the frontier one rung earlier
 when a conversation escalates), `session_header` (`x-tumnus-session`, names
 the conversation for trend tracking; falls back to hashing the first user
-message), `session_ttl_seconds` (3600, idle conversations are forgotten).
+message), `session_ttl_seconds` (3600, idle conversations are forgotten),
+per-role `instances` array (extra deployments of the same model; each
+conversation consistently lands on one of them by hashing its first user
+message, keeping that deployment's KV cache warm — fallbacks stay
+role-level).
 
 Good to know:
 

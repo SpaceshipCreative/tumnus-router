@@ -66,3 +66,12 @@ by one for that request (floor 1). Complexity 0 (classifier omitted the
 field) is never recorded. Idle conversations are forgotten after
 `session_ttl_seconds` (default 3600). `trajectory_window: 0` (default)
 disables the feature entirely.
+
+## 5. Instance affinity (optional)
+
+A role may declare `instances`: additional deployments serving the same
+model. When present, adapters select among the primary and the instances by
+hashing the conversation's first user message (first 200 chars), so every
+turn of one conversation lands on the same deployment and reuses its KV
+cache. Requests with no user text use the primary. Fallbacks remain
+role-level: instance selection never alters the decision ladder.
