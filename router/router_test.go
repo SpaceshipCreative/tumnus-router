@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -304,6 +305,36 @@ func TestParseConfigRejectsMalformedInstances(t *testing.T) {
 	}
 	if _, err := ParseConfig(raw); err == nil {
 		t.Fatal("expected error for instance with empty provider")
+	}
+}
+
+func TestPickInstance(t *testing.T) {
+	target := RoleTarget{
+		Provider: "vllm-blackwell", Model: "m",
+		Instances: []Instance{{Provider: "vllm-sparks", Model: "m"}},
+	}
+	// No affinity key or no instances -> primary.
+	if p, _ := PickInstance(target, ""); p != "vllm-blackwell" {
+		t.Fatalf("empty key must pick primary, got %s", p)
+	}
+	if p, _ := PickInstance(RoleTarget{Provider: "only", Model: "m"}, "conv"); p != "only" {
+		t.Fatalf("no instances must pick primary, got %s", p)
+	}
+	// Deterministic: same conversation always lands on the same instance.
+	first, _ := PickInstance(target, "some conversation opener")
+	for i := 0; i < 10; i++ {
+		if p, _ := PickInstance(target, "some conversation opener"); p != first {
+			t.Fatal("affinity not deterministic")
+		}
+	}
+	// Spreads: different conversations use both instances.
+	seen := map[string]bool{}
+	for i := 0; i < 64; i++ {
+		p, _ := PickInstance(target, "conversation "+strconv.Itoa(i))
+		seen[p] = true
+	}
+	if len(seen) != 2 {
+		t.Fatalf("expected both instances used across conversations, got %v", seen)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net/http"
 	"strconv"
@@ -108,6 +109,24 @@ func ParseConfig(raw any) (*Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// PickInstance selects among a role's deployments by hashing the
+// conversation's identity: every turn of one conversation lands on the same
+// instance, so its KV cache stays warm for the shared prefix.
+// ponytail: static affinity hashing; replace with a live cache-state scorer
+// only if instance sets become dynamic (autoscaling).
+func PickInstance(target RoleTarget, affinityKey string) (provider, model string) {
+	if len(target.Instances) == 0 || affinityKey == "" {
+		return target.Provider, target.Model
+	}
+	all := make([]Instance, 0, len(target.Instances)+1)
+	all = append(all, Instance{Provider: target.Provider, Model: target.Model})
+	all = append(all, target.Instances...)
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(affinityKey))
+	pick := all[h.Sum64()%uint64(len(all))]
+	return pick.Provider, pick.Model
 }
 
 // Analysis is Supra-Router-51M's structured verdict for one prompt.
