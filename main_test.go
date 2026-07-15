@@ -149,6 +149,40 @@ func TestConcurrentInitCleanupHook(t *testing.T) {
 	_ = Cleanup()
 }
 
+func TestPreRequestHookInstanceAffinity(t *testing.T) {
+	srv := fakeSupra(t, "Domain: chat | Complexity: 1 | Math: False | Code: False | Route: small model", 0)
+	t.Cleanup(srv.Close)
+	raw := validRawConfig()
+	raw["endpoint"] = srv.URL
+	raw["roles"].(map[string]any)["local_small"] = map[string]any{
+		"provider": "vllm-blackwell", "model": "qwen3.6-35b-a3b",
+		"instances": []map[string]any{{"provider": "vllm-sparks", "model": "qwen3.6-35b-a3b"}},
+	}
+	if err := Init(raw); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = Cleanup() })
+
+	// Same conversation twice -> same instance both times, and the picked
+	// instance is one of the declared pair. Spread across conversations is
+	// covered by the router-level TestPickInstance.
+	req1 := chatRequest("hello there")
+	req2 := chatRequest("hello there")
+	if err := PreRequestHook(newCtx(), req1); err != nil {
+		t.Fatal(err)
+	}
+	if err := PreRequestHook(newCtx(), req2); err != nil {
+		t.Fatal(err)
+	}
+	if req1.ChatRequest.Provider != req2.ChatRequest.Provider {
+		t.Fatalf("same conversation split across instances: %s vs %s", req1.ChatRequest.Provider, req2.ChatRequest.Provider)
+	}
+	got := string(req1.ChatRequest.Provider)
+	if got != "vllm-blackwell" && got != "vllm-sparks" {
+		t.Fatalf("picked unknown instance %q", got)
+	}
+}
+
 func TestPreRequestHookTrajectoryEscalates(t *testing.T) {
 	// Three turns, complexity 2 -> 3 -> 4, all Code. Threshold 5 means the
 	// final turn would normally stay on code_cheap; the upward trend lowers

@@ -106,8 +106,12 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 	}
 	role := routerpkg.ChooseRole(a, threshold)
 	target := cfg.Roles[role]
-	req.ChatRequest.Provider = schemas.ModelProvider(target.Provider)
-	req.ChatRequest.Model = target.Model
+	// Affinity key = the conversation's first user message: stable across
+	// turns, so one conversation always hits the same instance (warm KV cache).
+	affinityKey := routerpkg.ExtractFirstUserText(req.ChatRequest.Input, 200)
+	provider, model := routerpkg.PickInstance(target, affinityKey)
+	req.ChatRequest.Provider = schemas.ModelProvider(provider)
+	req.ChatRequest.Model = model
 	if len(target.Fallbacks) > 0 {
 		req.ChatRequest.Fallbacks = target.Fallbacks
 	} else {
@@ -116,7 +120,7 @@ func PreRequestHook(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) er
 
 	ctx.AppendRoutingEngineLog(schemas.RoutingEngineRoutingRule, schemas.LogLevelInfo,
 		fmt.Sprintf("tumnus: domain=%q complexity=%d code=%t math=%t route=%q threshold=%d -> role=%s target=%s/%s (classified in %s)",
-			a.Domain, a.Complexity, a.Code, a.Math, a.Route, threshold, role, target.Provider, target.Model, time.Since(start).Round(time.Millisecond)))
+			a.Domain, a.Complexity, a.Code, a.Math, a.Route, threshold, role, provider, model, time.Since(start).Round(time.Millisecond)))
 	return nil
 }
 
